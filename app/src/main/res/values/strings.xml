@@ -1,0 +1,24 @@
+<resources>
+    <string name="app_name">Calendar Widget</string>
+    <string name="agenda_widget_name">Calendar Agenda</string>
+    <string name="agenda_widget_description">Scrollable multi-day calendar agenda schedule</string>
+    <string name="next_up_widget_name">Next Up Calendar</string>
+    <string name="next_up_widget_description">Compact glanceable next upcoming calendar event</string>
+    <string name="permission_required_title">Calendar Access Required</string>
+    <string name="permission_required_desc">This widget needs permission to read your device calendar schedule.</string>
+    <string name="grant_permission">Grant Permission</string>
+    <string name="no_events_found">No upcoming events scheduled</string>
+    <string name="no_more_events_today">No more events scheduled for today</string>
+    <string name="today">Today</string>
+    <string name="tomorrow">Tomorrow</string>
+    <string name="all_day">All Day</string>
+    <string name="refresh">Refresh</string>
+    <string name="add_event">Add Event</string>
+    <string name="configure_widget">Configure Widget</string>
+    <string name="select_calendars">Select Calendars</string>
+    <string name="background_opacity">Background Opacity</string>
+    <string name="theme_mode">Theme</string>
+    <string name="lookahead_days">Lookahead Range</string>
+    <string name="font_size">Font Size</string>
+    <string name="save_widget">Save Widget</string>
+</resources>
