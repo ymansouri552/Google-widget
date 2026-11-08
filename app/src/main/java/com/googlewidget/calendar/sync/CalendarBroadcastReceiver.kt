@@ -8,6 +8,7 @@ import com.googlewidget.calendar.widget.AgendaGlanceWidget
 import com.googlewidget.calendar.widget.NextUpGlanceWidget
 import com.googlewidget.calendar.widget.WeeklyCalendarGlanceWidget
 import com.googlewidget.calendar.widget.ThreeDayTimelineGlanceWidget
+import com.googlewidget.calendar.widget.WidgetPlacement
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -18,13 +19,16 @@ class CalendarBroadcastReceiver : BroadcastReceiver() {
         val pendingResult = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                // Update all widgets when time, timezone, date, or calendar provider changes
-                AgendaGlanceWidget().updateAll(context)
-                NextUpGlanceWidget().updateAll(context)
-                WeeklyCalendarGlanceWidget().updateAll(context)
-                ThreeDayTimelineGlanceWidget().updateAll(context)
+                // Only spend the ( comparatively expensive ) re-render pass when a
+                // widget is actually placed on the home screen.
+                if (WidgetPlacement.hasAnyWidget(context)) {
+                    AgendaGlanceWidget().updateAll(context)
+                    NextUpGlanceWidget().updateAll(context)
+                    WeeklyCalendarGlanceWidget().updateAll(context)
+                    ThreeDayTimelineGlanceWidget().updateAll(context)
+                }
 
-                // Ensure content observer worker is active
+                // Keep the content-change observation chain armed.
                 CalendarSyncWorker.enqueue(context)
             } catch (e: Exception) {
                 e.printStackTrace()

@@ -1,10 +1,14 @@
 package com.googlewidget.calendar.ui
 
 import android.Manifest
+import android.app.Activity
 import android.appwidget.AppWidgetManager
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Bundle
+import android.provider.Settings
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -45,6 +49,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -57,12 +62,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.glance.appwidget.GlanceAppWidgetManager
 import androidx.glance.appwidget.state.updateAppWidgetState
 import androidx.glance.state.PreferencesGlanceStateDefinition
 import androidx.glance.appwidget.updateAll
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.lifecycleScope
 import com.googlewidget.calendar.data.CalendarAccount
 import com.googlewidget.calendar.data.CalendarRepository
 import com.googlewidget.calendar.data.WidgetConfigKeys
@@ -75,6 +84,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
+
+private fun openAppSettings(context: android.content.Context): Intent =
+    Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+        .setData(Uri.fromParts("package", context.packageName, null))
+        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 
 class WidgetConfigActivity : ComponentActivity() {
 
@@ -133,8 +147,7 @@ class WidgetConfigActivity : ComponentActivity() {
         lookaheadDays: Int,
         fontScale: String
     ) {
-        val scope = kotlinx.coroutines.CoroutineScope(Dispatchers.IO)
-        scope.launch {
+        lifecycleScope.launch(Dispatchers.IO) {
             try {
                 if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
                     val manager = GlanceAppWidgetManager(this@WidgetConfigActivity)
@@ -146,8 +159,14 @@ class WidgetConfigActivity : ComponentActivity() {
                         glanceId
                     ) { prefs ->
                         prefs.toMutablePreferences().apply {
+                            // Persist a placeholder when nothing is selected so the widget
+                            // shows no events; an empty set would filter to "all calendars".
                             this[WidgetConfigKeys.SELECTED_CALENDARS] =
-                                selectedIds.map { it.toString() }.toSet()
+                                if (selectedIds.isEmpty()) {
+                                    setOf(WidgetConfigKeys.NO_CALENDAR_PLACEHOLDER)
+                                } else {
+                                    selectedIds.map { it.toString() }.toSet()
+                                }
                             this[WidgetConfigKeys.BG_OPACITY] = opacity
                             this[WidgetConfigKeys.THEME_MODE] = themeMode
                             this[WidgetConfigKeys.LOOKAHEAD_DAYS] = lookaheadDays
@@ -155,29 +174,39 @@ class WidgetConfigActivity : ComponentActivity() {
                         }
                     }
 
-                    // Trigger widget update
-                    try { AgendaGlanceWidget().update(this@WidgetConfigActivity, glanceId) } catch (_: Exception) {}
-                    try { NextUpGlanceWidget().update(this@WidgetConfigActivity, glanceId) } catch (_: Exception) {}
-                    try { WeeklyCalendarGlanceWidget().update(this@WidgetConfigActivity, glanceId) } catch (_: Exception) {}
-                    try { ThreeDayTimelineGlanceWidget().update(this@WidgetConfigActivity, glanceId) } catch (_: Exception) {}
-
-                    // Refresh all widgets
+                    // One update pass over every placed instance. Per-glanceId
+                    // update() calls would throw for the three widget types that
+                    // don't own this glanceId, and updateAll already covers them.
                     AgendaGlanceWidget().updateAll(this@WidgetConfigActivity)
                     NextUpGlanceWidget().updateAll(this@WidgetConfigActivity)
                     WeeklyCalendarGlanceWidget().updateAll(this@WidgetConfigActivity)
                     ThreeDayTimelineGlanceWidget().updateAll(this@WidgetConfigActivity)
                 }
+
+                finishWithResult(RESULT_OK)
             } catch (e: Exception) {
                 e.printStackTrace()
-            } finally {
                 withContext(Dispatchers.Main) {
-                    val resultValue = Intent().apply {
-                        putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
-                    }
-                    setResult(RESULT_OK, resultValue)
-                    finish()
+                    Toast.makeText(
+                        this@WidgetConfigActivity,
+                        "Failed to save widget settings",
+                        Toast.LENGTH_SHORT
+                    ).show()
                 }
+                // Widget keeps its previous state; still return OK so an initial
+                // placement isn't discarded by the launcher.
+                finishWithResult(RESULT_OK)
             }
+        }
+    }
+
+    private suspend fun finishWithResult(resultCode: Int) {
+        withContext(Dispatchers.Main) {
+            val resultValue = Intent().apply {
+                putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
+            }
+            setResult(resultCode, resultValue)
+            finish()
         }
     }
 }
@@ -204,16 +233,41 @@ private fun WidgetConfigContent(
             ) == PackageManager.PERMISSION_GRANTED
         )
     }
+    var permanentlyDenied by remember { mutableStateOf(false) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         hasPermission = granted
         if (granted) {
+            permanentlyDenied = false
             val list = repository.getCalendars()
             calendars = list
             selectedCalendarIds = list.map { it.id }.toSet()
+        } else {
+            // When the system no longer shows a rationale, the permission was
+            // permanently denied; the only recovery path is system settings.
+            permanentlyDenied = (context as? Activity)?.shouldShowRequestPermissionRationale(
+                Manifest.permission.READ_CALENDAR
+            ) != true
         }
+    }
+
+    // Re-check when returning from the system settings screen.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                val grantedNow = ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.READ_CALENDAR
+                ) == PackageManager.PERMISSION_GRANTED
+                hasPermission = grantedNow
+                if (grantedNow) permanentlyDenied = false
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     LaunchedEffect(hasPermission) {
@@ -258,11 +312,26 @@ private fun WidgetConfigContent(
 
                         if (!hasPermission) {
                             Spacer(modifier = Modifier.height(12.dp))
-                            Button(
-                                onClick = { permissionLauncher.launch(Manifest.permission.READ_CALENDAR) },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text("Grant Calendar Permission")
+                            if (permanentlyDenied) {
+                                Text(
+                                    text = "Calendar access is turned off for this app. Re-enable it in system settings, then return here.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Button(
+                                    onClick = { context.startActivity(openAppSettings(context)) },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text("Open App Settings")
+                                }
+                            } else {
+                                Button(
+                                    onClick = { permissionLauncher.launch(Manifest.permission.READ_CALENDAR) },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text("Grant Calendar Permission")
+                                }
                             }
                         } else {
                             Spacer(modifier = Modifier.height(8.dp))

@@ -22,4 +22,13 @@ object WidgetConfigKeys {
 
     const val DEFAULT_OPACITY = 0.90f
     const val DEFAULT_LOOKAHEAD_DAYS = 14
+
+    /** Placeholder calendar id stored when the user deselects every calendar.
+     *  Querying with this id matches nothing, preserving "empty selection shows empty widget"
+     *  while an unconfigured widget (empty state) still defaults to all calendars. */
+    const val NO_CALENDAR_PLACEHOLDER = "-1"
+
+    /** Bounds for the day-offset navigation state (weekly / 3-day widgets). */
+    const val MIN_DAY_OFFSET = -366
+    const val MAX_DAY_OFFSET = 366
 }

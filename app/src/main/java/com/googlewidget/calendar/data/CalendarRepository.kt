@@ -11,6 +11,7 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
 import java.util.Locale
 
 class CalendarRepository(private val context: Context) {
@@ -217,7 +218,17 @@ class CalendarRepository(private val context: Context) {
 
         fun formatNextUpCountdown(event: CalendarEvent, now: Long = System.currentTimeMillis()): String {
             if (event.allDay) {
-                return "All Day Today"
+                val eventDate = getEventLocalDate(event)
+                val today = LocalDate.now()
+                return when {
+                    eventDate == today -> if (event.end > now) "All Day Today" else "Ended"
+                    eventDate == today.plusDays(1) -> "All Day Tomorrow"
+                    eventDate > today -> {
+                        val days = ChronoUnit.DAYS.between(today, eventDate)
+                        "In $days day${if (days > 1) "s" else ""}"
+                    }
+                    else -> "Ended"
+                }
             }
             if (event.begin <= now && event.end > now) {
                 val remainingMins = ((event.end - now) / 60000L).coerceAtLeast(1)

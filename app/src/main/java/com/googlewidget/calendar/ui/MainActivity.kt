@@ -1,11 +1,14 @@
 package com.googlewidget.calendar.ui
 
 import android.Manifest
+import android.app.Activity
 import android.content.ContentUris
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Bundle
 import android.provider.CalendarContract
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -48,6 +51,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -59,10 +63,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.glance.appwidget.updateAll
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.googlewidget.calendar.data.CalendarAccount
 import com.googlewidget.calendar.data.CalendarEvent
 import com.googlewidget.calendar.data.CalendarRepository
@@ -105,6 +112,7 @@ fun MainScreen() {
             ) == PackageManager.PERMISSION_GRANTED
         )
     }
+    var permanentlyDenied by remember { mutableStateOf(false) }
 
     var isLoading by remember { mutableStateOf(false) }
     var calendars by remember { mutableStateOf<List<CalendarAccount>>(emptyList()) }
@@ -149,8 +157,37 @@ fun MainScreen() {
     ) { granted ->
         hasPermission = granted
         if (granted) {
+            permanentlyDenied = false
             refreshAll()
+        } else {
+            // When the system no longer offers a rationale, the permission was
+            // permanently denied; the only recovery path is system settings.
+            permanentlyDenied = (context as? Activity)?.shouldShowRequestPermissionRationale(
+                Manifest.permission.READ_CALENDAR
+            ) != true
         }
+    }
+
+    // Re-check when coming back from the system settings screen.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                val grantedNow = ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.READ_CALENDAR
+                ) == PackageManager.PERMISSION_GRANTED
+                if (grantedNow != hasPermission) {
+                    hasPermission = grantedNow
+                    if (grantedNow) {
+                        permanentlyDenied = false
+                        refreshAll()
+                    }
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     LaunchedEffect(Unit) {
@@ -205,11 +242,26 @@ fun MainScreen() {
                                 color = MaterialTheme.colorScheme.onErrorContainer
                             )
                             Spacer(modifier = Modifier.height(12.dp))
-                            Button(
-                                onClick = { permissionLauncher.launch(Manifest.permission.READ_CALENDAR) },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text("Grant Permission")
+                            if (permanentlyDenied) {
+                                Text(
+                                    text = "Calendar access is turned off for this app. Re-enable it in system settings, then return here.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onErrorContainer
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Button(
+                                    onClick = { context.startActivity(openAppSettings(context)) },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text("Open App Settings")
+                                }
+                            } else {
+                                Button(
+                                    onClick = { permissionLauncher.launch(Manifest.permission.READ_CALENDAR) },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text("Grant Permission")
+                                }
                             }
                         }
                     }
@@ -420,3 +472,8 @@ fun MainScreen() {
         }
     }
 }
+
+private fun openAppSettings(context: android.content.Context): Intent =
+    Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+        .setData(Uri.fromParts("package", context.packageName, null))
+        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)

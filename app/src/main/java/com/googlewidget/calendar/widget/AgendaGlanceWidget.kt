@@ -80,7 +80,8 @@ class AgendaGlanceWidget : GlanceAppWidget() {
                 opacity = opacity,
                 themeMode = themeMode,
                 fontScale = fontScale,
-                lookaheadDays = lookaheadDays
+                lookaheadDays = lookaheadDays,
+                noCalendarsSelected = selectedCalendarIds == setOf(WidgetConfigKeys.NO_CALENDAR_PLACEHOLDER.toLong())
             )
         }
     }
@@ -93,7 +94,8 @@ private fun AgendaWidgetRoot(
     opacity: Float,
     themeMode: String,
     fontScale: String,
-    lookaheadDays: Int
+    lookaheadDays: Int,
+    noCalendarsSelected: Boolean
 ) {
     val typography = WidgetThemeHelper.getTypography(fontScale)
     val backgroundColor = WidgetThemeHelper.getSurfaceColor(themeMode, opacity)
@@ -120,7 +122,8 @@ private fun AgendaWidgetRoot(
                     themeMode = themeMode,
                     opacity = opacity,
                     typography = typography,
-                    lookaheadDays = lookaheadDays
+                    lookaheadDays = lookaheadDays,
+                    noCalendarsSelected = noCalendarsSelected
                 )
             }
         }
@@ -134,7 +137,8 @@ private fun AgendaContent(
     themeMode: String,
     opacity: Float,
     typography: WidgetTypography,
-    lookaheadDays: Int
+    lookaheadDays: Int,
+    noCalendarsSelected: Boolean
 ) {
     val today = LocalDate.now()
     val headerDateStr = today.format(DateTimeFormatter.ofPattern("EEEE, MMM d", Locale.getDefault()))
@@ -214,7 +218,7 @@ private fun AgendaContent(
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        text = "No events in next $lookaheadDays days",
+                        text = if (noCalendarsSelected) "No calendars selected" else "No events in next $lookaheadDays days",
                         style = TextStyle(
                             color = WidgetThemeHelper.getSecondaryTextColor(themeMode),
                             fontSize = typography.subtitleSize

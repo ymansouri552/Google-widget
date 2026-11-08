@@ -80,6 +80,11 @@
                 android:resource="@xml/three_day_timeline_widget_info" />
         </receiver>
 
+        <!-- Next Up countdown boundary refresh alarm receiver -->
+        <receiver
+            android:name=".sync.NextUpAlarmReceiver"
+            android:exported="false" />
+
         <!-- System & Calendar Changes Receiver -->
         <receiver
             android:name=".sync.CalendarBroadcastReceiver"

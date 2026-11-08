@@ -44,6 +44,7 @@ import com.googlewidget.calendar.data.WidgetConfigKeys
 import com.googlewidget.calendar.ui.MainActivity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import com.googlewidget.calendar.sync.NextUpRefreshScheduler
 import java.time.LocalDate
 
 class NextUpGlanceWidget : GlanceAppWidget() {
@@ -67,6 +68,13 @@ class NextUpGlanceWidget : GlanceAppWidget() {
         val calendarResult = withContext(Dispatchers.IO) {
             repository.getUpcomingEvents(now - 60_000L, endMillis, selectedCalendarIds)
         }
+
+        // Schedule a refresh exactly at the shown event's next boundary so the
+        // countdown text ("Starts in…" ↔ "Happening now" → next event) stays
+        // accurate between the 30-minute system update ticks.
+        (calendarResult as? CalendarResult.Success)?.data
+            ?.firstOrNull { it.end > now }
+            ?.let { NextUpRefreshScheduler.schedule(context, it, now) }
 
         provideContent {
             NextUpWidgetRoot(

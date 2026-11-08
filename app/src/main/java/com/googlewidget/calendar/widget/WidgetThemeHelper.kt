@@ -17,6 +17,21 @@ data class WidgetTypography(
 
 object WidgetThemeHelper {
 
+    /**
+     * Calendar events inherit their calendar's display color, which can be near-white
+     * (e.g. light yellow, white). Text drawn directly on the event color must adapt:
+     * this returns dark ink on bright event colors and white on dark ones.
+     */
+    fun getEventTextColor(eventColor: Color): Color {
+        val red = eventColor.red
+        val green = eventColor.green
+        val blue = eventColor.blue
+        // Perceived brightness (sRGB weights) — linearization is unnecessary here
+        // because we only need a coarse bright/dark split for readability.
+        val brightness = 0.299f * red + 0.587f * green + 0.114f * blue
+        return if (brightness > 0.6f) Color(0xFF202124) else Color.White
+    }
+
     fun getTypography(fontScale: String): WidgetTypography {
         return if (fontScale == WidgetConfigKeys.FONT_SCALE_COMPACT) {
             WidgetTypography(
