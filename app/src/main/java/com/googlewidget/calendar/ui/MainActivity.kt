@@ -71,6 +71,8 @@ import com.googlewidget.calendar.sync.CalendarSyncWorker
 import com.googlewidget.calendar.ui.theme.GoogleWidgetTheme
 import com.googlewidget.calendar.widget.AgendaGlanceWidget
 import com.googlewidget.calendar.widget.NextUpGlanceWidget
+import com.googlewidget.calendar.widget.WeeklyCalendarGlanceWidget
+import com.googlewidget.calendar.widget.ThreeDayTimelineGlanceWidget
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -112,9 +114,11 @@ fun MainScreen() {
         isLoading = true
         scope.launch(Dispatchers.IO) {
             try {
-                // Update widgets and enqueue background sync
+                // Update all widgets and enqueue background sync
                 AgendaGlanceWidget().updateAll(context)
                 NextUpGlanceWidget().updateAll(context)
+                WeeklyCalendarGlanceWidget().updateAll(context)
+                ThreeDayTimelineGlanceWidget().updateAll(context)
                 CalendarSyncWorker.enqueue(context)
 
                 // Load preview data

@@ -4,6 +4,10 @@
     <string name="agenda_widget_description">Scrollable multi-day calendar agenda schedule</string>
     <string name="next_up_widget_name">Next Up Calendar</string>
     <string name="next_up_widget_description">Compact glanceable next upcoming calendar event</string>
+    <string name="weekly_calendar_widget_name">Weekly Calendar</string>
+    <string name="weekly_calendar_widget_description">7-day weekly column grid calendar</string>
+    <string name="three_day_timeline_widget_name">3-Day Timeline</string>
+    <string name="three_day_timeline_widget_description">3-day hourly timeline grid schedule</string>
     <string name="permission_required_title">Calendar Access Required</string>
     <string name="permission_required_desc">This widget needs permission to read your device calendar schedule.</string>
     <string name="grant_permission">Grant Permission</string>

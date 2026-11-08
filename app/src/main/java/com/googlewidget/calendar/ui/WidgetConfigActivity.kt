@@ -62,12 +62,15 @@ import androidx.core.content.ContextCompat
 import androidx.glance.appwidget.GlanceAppWidgetManager
 import androidx.glance.appwidget.state.updateAppWidgetState
 import androidx.glance.state.PreferencesGlanceStateDefinition
+import androidx.glance.appwidget.updateAll
 import com.googlewidget.calendar.data.CalendarAccount
 import com.googlewidget.calendar.data.CalendarRepository
 import com.googlewidget.calendar.data.WidgetConfigKeys
 import com.googlewidget.calendar.ui.theme.GoogleWidgetTheme
 import com.googlewidget.calendar.widget.AgendaGlanceWidget
 import com.googlewidget.calendar.widget.NextUpGlanceWidget
+import com.googlewidget.calendar.widget.WeeklyCalendarGlanceWidget
+import com.googlewidget.calendar.widget.ThreeDayTimelineGlanceWidget
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -153,8 +156,16 @@ class WidgetConfigActivity : ComponentActivity() {
                     }
 
                     // Trigger widget update
-                    AgendaGlanceWidget().update(this@WidgetConfigActivity, glanceId)
-                    NextUpGlanceWidget().update(this@WidgetConfigActivity, glanceId)
+                    try { AgendaGlanceWidget().update(this@WidgetConfigActivity, glanceId) } catch (_: Exception) {}
+                    try { NextUpGlanceWidget().update(this@WidgetConfigActivity, glanceId) } catch (_: Exception) {}
+                    try { WeeklyCalendarGlanceWidget().update(this@WidgetConfigActivity, glanceId) } catch (_: Exception) {}
+                    try { ThreeDayTimelineGlanceWidget().update(this@WidgetConfigActivity, glanceId) } catch (_: Exception) {}
+
+                    // Refresh all widgets
+                    AgendaGlanceWidget().updateAll(this@WidgetConfigActivity)
+                    NextUpGlanceWidget().updateAll(this@WidgetConfigActivity)
+                    WeeklyCalendarGlanceWidget().updateAll(this@WidgetConfigActivity)
+                    ThreeDayTimelineGlanceWidget().updateAll(this@WidgetConfigActivity)
                 }
             } catch (e: Exception) {
                 e.printStackTrace()

@@ -11,6 +11,7 @@ object WidgetConfigKeys {
     val THEME_MODE = stringPreferencesKey("theme_mode")
     val LOOKAHEAD_DAYS = intPreferencesKey("lookahead_days")
     val FONT_SCALE = stringPreferencesKey("font_scale")
+    val KEY_DAY_OFFSET = intPreferencesKey("day_offset")
 
     const val THEME_SYSTEM = "SYSTEM"
     const val THEME_DARK = "DARK"

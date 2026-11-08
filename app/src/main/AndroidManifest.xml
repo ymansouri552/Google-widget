@@ -56,6 +56,30 @@
                 android:resource="@xml/next_up_widget_info" />
         </receiver>
 
+        <!-- Widget C: Weekly Calendar Glance Widget Receiver -->
+        <receiver
+            android:name=".widget.WeeklyCalendarWidgetReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/weekly_calendar_widget_info" />
+        </receiver>
+
+        <!-- Widget D: 3-Day Timeline Glance Widget Receiver -->
+        <receiver
+            android:name=".widget.ThreeDayTimelineWidgetReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/three_day_timeline_widget_info" />
+        </receiver>
+
         <!-- System & Calendar Changes Receiver -->
         <receiver
             android:name=".sync.CalendarBroadcastReceiver"

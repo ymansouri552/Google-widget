@@ -11,6 +11,8 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.googlewidget.calendar.widget.AgendaGlanceWidget
 import com.googlewidget.calendar.widget.NextUpGlanceWidget
+import com.googlewidget.calendar.widget.WeeklyCalendarGlanceWidget
+import com.googlewidget.calendar.widget.ThreeDayTimelineGlanceWidget
 import java.util.concurrent.TimeUnit
 
 class CalendarSyncWorker(
@@ -20,9 +22,11 @@ class CalendarSyncWorker(
 
     override suspend fun doWork(): Result {
         return try {
-            // Trigger instant update on both widgets
+            // Trigger instant update on all 4 widgets
             AgendaGlanceWidget().updateAll(context)
             NextUpGlanceWidget().updateAll(context)
+            WeeklyCalendarGlanceWidget().updateAll(context)
+            ThreeDayTimelineGlanceWidget().updateAll(context)
 
             // Re-enqueue observation trigger to capture future edits
             enqueue(context)

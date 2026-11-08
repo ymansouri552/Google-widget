@@ -14,5 +14,7 @@ class RefreshActionCallback : ActionCallback {
     ) {
         AgendaGlanceWidget().updateAll(context)
         NextUpGlanceWidget().updateAll(context)
+        WeeklyCalendarGlanceWidget().updateAll(context)
+        ThreeDayTimelineGlanceWidget().updateAll(context)
     }
 }

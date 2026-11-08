@@ -6,6 +6,8 @@ import android.content.Intent
 import androidx.glance.appwidget.updateAll
 import com.googlewidget.calendar.widget.AgendaGlanceWidget
 import com.googlewidget.calendar.widget.NextUpGlanceWidget
+import com.googlewidget.calendar.widget.WeeklyCalendarGlanceWidget
+import com.googlewidget.calendar.widget.ThreeDayTimelineGlanceWidget
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -16,9 +18,11 @@ class CalendarBroadcastReceiver : BroadcastReceiver() {
         val pendingResult = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                // Update both widgets when time, timezone, date, or calendar provider changes
+                // Update all widgets when time, timezone, date, or calendar provider changes
                 AgendaGlanceWidget().updateAll(context)
                 NextUpGlanceWidget().updateAll(context)
+                WeeklyCalendarGlanceWidget().updateAll(context)
+                ThreeDayTimelineGlanceWidget().updateAll(context)
 
                 // Ensure content observer worker is active
                 CalendarSyncWorker.enqueue(context)
