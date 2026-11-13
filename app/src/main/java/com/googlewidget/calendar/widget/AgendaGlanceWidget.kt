@@ -100,7 +100,7 @@ private fun AgendaWidgetRoot(
     noCalendarsSelected: Boolean
 ) {
     val typography = WidgetThemeHelper.getTypography(fontScale)
-    val backgroundColor = WidgetThemeHelper.getSurfaceColor(themeMode, opacity)
+    val backgroundColor = WidgetThemeHelper.getSurfaceColor(context, themeMode, opacity)
 
     Box(
         modifier = GlanceModifier

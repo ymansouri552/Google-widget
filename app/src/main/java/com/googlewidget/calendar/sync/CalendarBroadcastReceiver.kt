@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import androidx.glance.appwidget.updateAll
+import com.googlewidget.calendar.data.CalendarRepository
 import com.googlewidget.calendar.widget.AgendaGlanceWidget
 import com.googlewidget.calendar.widget.NextUpGlanceWidget
 import com.googlewidget.calendar.widget.WeeklyCalendarGlanceWidget
@@ -16,6 +17,7 @@ import kotlinx.coroutines.launch
 class CalendarBroadcastReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent?) {
+        CalendarRepository.clearCache()
         val pendingResult = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
             try {

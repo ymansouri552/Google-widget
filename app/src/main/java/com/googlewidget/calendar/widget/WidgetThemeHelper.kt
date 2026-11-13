@@ -1,5 +1,7 @@
 package com.googlewidget.calendar.widget
 
+import android.content.Context
+import android.content.res.Configuration
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.sp
@@ -52,23 +54,45 @@ object WidgetThemeHelper {
         }
     }
 
-    fun getSurfaceColor(themeMode: String, opacity: Float): Color {
-        val alpha = opacity.coerceIn(0.0f, 1.0f)
+    fun isDarkTheme(context: Context?, themeMode: String): Boolean {
         return when (themeMode) {
-            WidgetConfigKeys.THEME_LIGHT -> Color(0.98f, 0.98f, 0.99f, alpha)
-            WidgetConfigKeys.THEME_DARK -> Color(0.12f, 0.13f, 0.14f, alpha)
-            else -> Color(0.13f, 0.14f, 0.15f, alpha)
+            WidgetConfigKeys.THEME_LIGHT -> false
+            WidgetConfigKeys.THEME_DARK -> true
+            else -> {
+                if (context == null) true
+                else {
+                    val nightMode = context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
+                    nightMode == Configuration.UI_MODE_NIGHT_YES
+                }
+            }
         }
     }
 
-    fun getCardBackgroundColor(themeMode: String, opacity: Float): Color {
-        val alpha = (opacity * 0.85f).coerceIn(0.0f, 1.0f)
-        return when (themeMode) {
-            WidgetConfigKeys.THEME_LIGHT -> Color(1.0f, 1.0f, 1.0f, alpha)
-            WidgetConfigKeys.THEME_DARK -> Color(0.18f, 0.19f, 0.20f, alpha)
-            else -> Color(0.18f, 0.19f, 0.20f, alpha)
+    fun getSurfaceColor(context: Context?, themeMode: String, opacity: Float): Color {
+        val alpha = opacity.coerceIn(0.0f, 1.0f)
+        val isDark = isDarkTheme(context, themeMode)
+        return if (isDark) {
+            Color(0.12f, 0.13f, 0.14f, alpha)
+        } else {
+            Color(0.98f, 0.98f, 0.99f, alpha)
         }
     }
+
+    fun getSurfaceColor(themeMode: String, opacity: Float): Color =
+        getSurfaceColor(null, themeMode, opacity)
+
+    fun getCardBackgroundColor(context: Context?, themeMode: String, opacity: Float): Color {
+        val alpha = (opacity * 0.85f).coerceIn(0.0f, 1.0f)
+        val isDark = isDarkTheme(context, themeMode)
+        return if (isDark) {
+            Color(0.18f, 0.19f, 0.20f, alpha)
+        } else {
+            Color(1.0f, 1.0f, 1.0f, alpha)
+        }
+    }
+
+    fun getCardBackgroundColor(themeMode: String, opacity: Float): Color =
+        getCardBackgroundColor(null, themeMode, opacity)
 
     fun getPrimaryTextColor(themeMode: String): ColorProvider {
         return when (themeMode) {

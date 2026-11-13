@@ -6,6 +6,9 @@ import android.content.Context
 import android.content.Intent
 import android.provider.CalendarContract
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -59,64 +62,72 @@ class WeeklyCalendarGlanceWidget : GlanceAppWidget() {
     override val stateDefinition = PreferencesGlanceStateDefinition
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
-        val prefs = getAppWidgetState(context, PreferencesGlanceStateDefinition, id)
-        val selectedCalendarIds = prefs[WidgetConfigKeys.SELECTED_CALENDARS]
-            ?.mapNotNull { it.toLongOrNull() }
-            ?.toSet() ?: emptySet()
-        val opacity = prefs[WidgetConfigKeys.BG_OPACITY] ?: WidgetConfigKeys.DEFAULT_OPACITY
-        val themeMode = prefs[WidgetConfigKeys.THEME_MODE] ?: WidgetConfigKeys.THEME_SYSTEM
-        val dayOffset = (prefs[WidgetConfigKeys.KEY_DAY_OFFSET] ?: 0)
-            .coerceIn(WidgetConfigKeys.MIN_DAY_OFFSET, WidgetConfigKeys.MAX_DAY_OFFSET)
-
         val appWidgetId = try {
             GlanceAppWidgetManager(context).getAppWidgetId(id)
         } catch (_: Exception) {
             AppWidgetManager.INVALID_APPWIDGET_ID
         }
+        val initialPrefs = getAppWidgetState(context, PreferencesGlanceStateDefinition, id)
+        val initialLive = WidgetLiveState.from(initialPrefs)
+        WidgetLiveStateHub.publish(appWidgetId, initialLive)
 
+        val appContext = context.applicationContext
         val today = LocalDate.now()
-        val targetDate = today.plusDays(dayOffset.toLong())
-        // Follow the device locale's first day of week (Sunday/Monday/etc.) instead
-        // of hardcoding a Sunday-start week with S/M/T day letters.
         val locale = Locale.getDefault()
         val firstDayOfWeek = WeekFields.of(locale).firstDayOfWeek
-        val startOfWeek = targetDate.with(TemporalAdjusters.previousOrSame(firstDayOfWeek))
-        val weekDates = (0L..6L).map { startOfWeek.plusDays(it) }
-        val dayLetters = (0L..6L).map {
-            startOfWeek.plusDays(it).dayOfWeek.getDisplayName(
-                java.time.format.TextStyle.NARROW, locale
+        val initialStartOfWeek = today
+            .plusDays(initialLive.dayOffset.toLong())
+            .with(TemporalAdjusters.previousOrSame(firstDayOfWeek))
+        val initialWeekDates = (0L..6L).map { initialStartOfWeek.plusDays(it) }
+        val initialResult = withContext(Dispatchers.IO) {
+            CalendarRepository(appContext).getUpcomingEvents(
+                initialWeekDates.first().minusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli(),
+                initialWeekDates.last().plusDays(2).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli(),
+                initialLive.selectedCalendarIds
             )
         }
 
-        val firstDay = weekDates.first()
-        val lastDay = weekDates.last()
-        val monthTitle = if (firstDay.month == lastDay.month && firstDay.year == lastDay.year) {
-            firstDay.format(DateTimeFormatter.ofPattern("MMMM", Locale.getDefault()))
-        } else if (firstDay.year == lastDay.year) {
-            "${firstDay.format(DateTimeFormatter.ofPattern("MMM", Locale.getDefault()))} – ${lastDay.format(DateTimeFormatter.ofPattern("MMM", Locale.getDefault()))}"
-        } else {
-            "${firstDay.format(DateTimeFormatter.ofPattern("MMM yyyy", Locale.getDefault()))} – ${lastDay.format(DateTimeFormatter.ofPattern("MMM yyyy", Locale.getDefault()))}"
-        }
-
-        val repository = CalendarRepository(context)
-        val startMillis = firstDay.minusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-        val endMillis = lastDay.plusDays(2).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-
-        val calendarResult = withContext(Dispatchers.IO) {
-            repository.getUpcomingEvents(startMillis, endMillis, selectedCalendarIds)
-        }
-
         provideContent {
+            // Live state: every tap publishes here, which recomposes this running
+            // session composition in-process. Without this, update() during a
+            // live session only re-pushes the stale content.
+            val live by WidgetLiveStateHub.flow(appWidgetId).collectAsState(initial = initialLive)
+            val now = LocalDate.now()
+            val targetDate = now.plusDays(live.dayOffset.toLong())
+            // Follow the device locale's first day of week (Sunday/Monday/etc.) instead
+            // of hardcoding a Sunday-start week with S/M/T day letters.
+            val startOfWeek = targetDate.with(TemporalAdjusters.previousOrSame(firstDayOfWeek))
+            val weekDates = (0L..6L).map { startOfWeek.plusDays(it) }
+            val dayLetters = (0L..6L).map {
+                startOfWeek.plusDays(it).dayOfWeek.getDisplayName(
+                    java.time.format.TextStyle.NARROW, locale
+                )
+            }
+
+            val calendarResult by produceState(
+                initialValue = initialResult,
+                key1 = weekDates,
+                key2 = live.selectedCalendarIds
+            ) {
+                value = withContext(Dispatchers.IO) {
+                    CalendarRepository(appContext).getUpcomingEvents(
+                        weekDates.first().minusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli(),
+                        weekDates.last().plusDays(2).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli(),
+                        live.selectedCalendarIds
+                    )
+                }
+            }
+
             WeeklyWidgetRoot(
                 context = context,
                 appWidgetId = appWidgetId,
                 result = calendarResult,
-                today = today,
+                today = now,
                 weekDates = weekDates,
-                monthTitle = monthTitle,
+                monthTitle = monthTitleFor(weekDates.first(), weekDates.last()),
                 dayLetters = dayLetters,
-                opacity = opacity,
-                themeMode = themeMode
+                opacity = live.bgOpacity,
+                themeMode = live.themeMode
             )
         }
     }
@@ -134,7 +145,7 @@ private fun WeeklyWidgetRoot(
     opacity: Float,
     themeMode: String
 ) {
-    val backgroundColor = WidgetThemeHelper.getSurfaceColor(themeMode, opacity)
+    val backgroundColor = WidgetThemeHelper.getSurfaceColor(context, themeMode, opacity)
 
     Box(
         modifier = GlanceModifier

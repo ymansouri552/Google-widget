@@ -80,6 +80,8 @@ import com.googlewidget.calendar.widget.AgendaGlanceWidget
 import com.googlewidget.calendar.widget.NextUpGlanceWidget
 import com.googlewidget.calendar.widget.WeeklyCalendarGlanceWidget
 import com.googlewidget.calendar.widget.ThreeDayTimelineGlanceWidget
+import com.googlewidget.calendar.widget.WidgetLiveState
+import com.googlewidget.calendar.widget.WidgetLiveStateHub
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -149,6 +151,7 @@ class WidgetConfigActivity : ComponentActivity() {
     ) {
         lifecycleScope.launch(Dispatchers.IO) {
             try {
+                CalendarRepository.clearCache()
                 if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
                     val manager = GlanceAppWidgetManager(this@WidgetConfigActivity)
                     val glanceId = manager.getGlanceIdBy(appWidgetId)
@@ -158,7 +161,7 @@ class WidgetConfigActivity : ComponentActivity() {
                         PreferencesGlanceStateDefinition,
                         glanceId
                     ) { prefs ->
-                        prefs.toMutablePreferences().apply {
+                        val updated = prefs.toMutablePreferences().apply {
                             // Persist a placeholder when nothing is selected so the widget
                             // shows no events; an empty set would filter to "all calendars".
                             this[WidgetConfigKeys.SELECTED_CALENDARS] =
@@ -172,6 +175,10 @@ class WidgetConfigActivity : ComponentActivity() {
                             this[WidgetConfigKeys.LOOKAHEAD_DAYS] = lookaheadDays
                             this[WidgetConfigKeys.FONT_SCALE] = fontScale
                         }
+                        // Keep a live session composition in sync; otherwise the
+                        // widget would ignore the new settings until the session died.
+                        WidgetLiveStateHub.publish(appWidgetId, WidgetLiveState.from(updated))
+                        updated
                     }
 
                     // One update pass over every placed instance. Per-glanceId

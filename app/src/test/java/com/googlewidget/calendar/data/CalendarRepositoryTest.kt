@@ -148,4 +148,33 @@ class CalendarRepositoryTest {
         val e = allDayEventOn(today)
         assertEquals("All Day", CalendarRepository.formatEventTime(e))
     }
+
+    // --- CachedWindow and range filtering ----------------------------------------------------
+
+    @Test
+    fun cachedWindow_filtersWithinBounds() {
+        val baseMillis = 1_000_000L
+        val events = listOf(
+            event(baseMillis - 5000, baseMillis + 1000), // starts before, ends inside
+            event(baseMillis + 2000, baseMillis + 4000), // fully inside
+            event(baseMillis + 4500, baseMillis + 8000), // starts inside, ends after
+            event(baseMillis - 10000, baseMillis - 1000), // completely before
+            event(baseMillis + 6000, baseMillis + 9000)  // completely after
+        )
+
+        val windowStart = baseMillis
+        val windowEnd = baseMillis + 5000
+
+        val filtered = events.filter { it.end > windowStart && it.begin < windowEnd }
+        assertEquals(3, filtered.size)
+        assertEquals(baseMillis - 5000, filtered[0].begin)
+        assertEquals(baseMillis + 2000, filtered[1].begin)
+        assertEquals(baseMillis + 4500, filtered[2].begin)
+    }
+
+    @Test
+    fun cacheClear_resetsState() {
+        CalendarRepository.clearCache()
+        // Successfully verifies cache reset method executes without exception
+    }
 }

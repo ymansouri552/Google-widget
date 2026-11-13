@@ -9,6 +9,7 @@ import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
+import com.googlewidget.calendar.data.CalendarRepository
 import com.googlewidget.calendar.widget.AgendaGlanceWidget
 import com.googlewidget.calendar.widget.NextUpGlanceWidget
 import com.googlewidget.calendar.widget.WeeklyCalendarGlanceWidget
@@ -23,6 +24,7 @@ class CalendarSyncWorker(
 
     override suspend fun doWork(): Result {
         return try {
+            CalendarRepository.clearCache()
             // Re-render every placed widget instance; skipped entirely when no
             // widget is on screen so calendar churn is cheap for everyone else.
             if (WidgetPlacement.hasAnyWidget(context)) {

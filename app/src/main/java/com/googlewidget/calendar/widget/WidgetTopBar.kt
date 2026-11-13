@@ -36,6 +36,20 @@ import androidx.glance.unit.ColorProvider
 import com.googlewidget.calendar.R
 import com.googlewidget.calendar.data.WidgetConfigKeys
 import com.googlewidget.calendar.ui.WidgetConfigActivity
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.util.Locale
+
+/** "March" / "Mar – Apr" / "Mar 2025 – Apr 2026" header for a day range. */
+internal fun monthTitleFor(first: LocalDate, last: LocalDate): String {
+    return if (first.month == last.month && first.year == last.year) {
+        first.format(DateTimeFormatter.ofPattern("MMMM", Locale.getDefault()))
+    } else if (first.year == last.year) {
+        "${first.format(DateTimeFormatter.ofPattern("MMM", Locale.getDefault()))} – ${last.format(DateTimeFormatter.ofPattern("MMM", Locale.getDefault()))}"
+    } else {
+        "${first.format(DateTimeFormatter.ofPattern("MMM yyyy", Locale.getDefault()))} – ${last.format(DateTimeFormatter.ofPattern("MMM yyyy", Locale.getDefault()))}"
+    }
+}
 
 @Composable
 fun WidgetTopBar(
@@ -48,25 +62,22 @@ fun WidgetTopBar(
     themeMode: String,
     modifier: GlanceModifier = GlanceModifier
 ) {
-    // Concrete icon tint: the vector drawables ship white and would be
-    // invisible on the light theme's near-white bar background.
-    val iconColor = when (themeMode) {
-        WidgetConfigKeys.THEME_LIGHT -> Color(0xFF202124)
-        else -> Color(0xFFE8EAED)
-    }
-    val barBackgroundColor = WidgetThemeHelper.getCardBackgroundColor(themeMode, 1f)
+    // Concrete icon tint adapted to the active theme mode and system night state.
+    val isDark = WidgetThemeHelper.isDarkTheme(context, themeMode)
+    val iconColor = if (isDark) Color(0xFFE8EAED) else Color(0xFF202124)
+    val barBackgroundColor = WidgetThemeHelper.getCardBackgroundColor(context, themeMode, 1f)
 
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .height(36.dp)
+            .height(40.dp)
             .padding(horizontal = 4.dp, vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         // Left: Calendar/Today icon button displaying current day number
         Box(
             modifier = GlanceModifier
-                .size(30.dp)
+                .size(32.dp)
                 .cornerRadius(6.dp)
                 .background(barBackgroundColor)
                 .clickable(actionRunCallback<ResetDateOffsetAction>()),
@@ -106,23 +117,24 @@ fun WidgetTopBar(
             verticalAlignment = Alignment.CenterVertically,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // < button
+            // < button (enlarged touch target with visible card background for reliable thumb taps)
             Box(
                 modifier = GlanceModifier
-                    .size(28.dp)
-                    .cornerRadius(14.dp)
+                    .size(width = 42.dp, height = 36.dp)
+                    .cornerRadius(8.dp)
+                    .background(barBackgroundColor)
                     .clickable(onPrevClick),
                 contentAlignment = Alignment.Center
             ) {
                 Image(
                     provider = ImageProvider(R.drawable.ic_chevron_left),
                     contentDescription = "Previous",
-                    modifier = GlanceModifier.size(18.dp),
+                    modifier = GlanceModifier.size(20.dp),
                     colorFilter = ColorFilter.tint(ColorProvider(iconColor))
                 )
             }
 
-            Spacer(modifier = GlanceModifier.width(4.dp))
+            Spacer(modifier = GlanceModifier.width(6.dp))
 
             // Month title
             Text(
@@ -135,20 +147,21 @@ fun WidgetTopBar(
                 maxLines = 1
             )
 
-            Spacer(modifier = GlanceModifier.width(4.dp))
+            Spacer(modifier = GlanceModifier.width(6.dp))
 
-            // > button
+            // > button (enlarged touch target with visible card background for reliable thumb taps)
             Box(
                 modifier = GlanceModifier
-                    .size(28.dp)
-                    .cornerRadius(14.dp)
+                    .size(width = 42.dp, height = 36.dp)
+                    .cornerRadius(8.dp)
+                    .background(barBackgroundColor)
                     .clickable(onNextClick),
                 contentAlignment = Alignment.Center
             ) {
                 Image(
                     provider = ImageProvider(R.drawable.ic_chevron_right),
                     contentDescription = "Next",
-                    modifier = GlanceModifier.size(18.dp),
+                    modifier = GlanceModifier.size(20.dp),
                     colorFilter = ColorFilter.tint(ColorProvider(iconColor))
                 )
             }

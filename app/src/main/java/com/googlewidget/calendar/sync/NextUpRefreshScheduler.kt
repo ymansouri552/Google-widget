@@ -7,6 +7,8 @@ import android.content.Intent
 import android.os.Build
 import com.googlewidget.calendar.data.CalendarEvent
 import com.googlewidget.calendar.widget.NextUpGlanceWidget
+import java.time.LocalDate
+import java.time.ZoneId
 
 /**
  * Keeps the Next Up widget's countdown text from going stale between the
@@ -20,15 +22,19 @@ object NextUpRefreshScheduler {
     private const val BOUNDARY_GRACE_MS = 1_000L
 
     fun schedule(context: Context, event: CalendarEvent?, now: Long) {
-        if (event == null) {
-            cancel(context)
-            return
-        }
+        val nextMidnight = LocalDate.now().plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
 
-        val boundaryAt = when {
+        val eventBoundary = when {
+            event == null -> Long.MAX_VALUE
             event.begin > now -> event.begin             // upcoming: refresh when it starts
             event.end > now -> event.end                 // ongoing: refresh when it ends
-            else -> return
+            else -> Long.MAX_VALUE
+        }
+
+        val boundaryAt = minOf(eventBoundary, nextMidnight)
+        if (boundaryAt == Long.MAX_VALUE) {
+            cancel(context)
+            return
         }
 
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
@@ -41,9 +47,10 @@ object NextUpRefreshScheduler {
 
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !alarmManager.canScheduleExactAlarms()) {
-                alarmManager.setAndAllowWhileIdle(
+                alarmManager.setWindow(
                     AlarmManager.RTC_WAKEUP,
                     boundaryAt + BOUNDARY_GRACE_MS,
+                    15_000L,
                     pendingIntent
                 )
             } else {
@@ -54,14 +61,23 @@ object NextUpRefreshScheduler {
                 )
             }
         } catch (e: SecurityException) {
-            // Exact alarms unavailable; fall back to the inexact variant.
+            // Exact alarms unavailable; fall back to windowed or inexact variant.
             try {
-                alarmManager.setAndAllowWhileIdle(
+                alarmManager.setWindow(
                     AlarmManager.RTC_WAKEUP,
                     boundaryAt + BOUNDARY_GRACE_MS,
+                    15_000L,
                     pendingIntent
                 )
             } catch (_: Exception) {
+                try {
+                    alarmManager.setAndAllowWhileIdle(
+                        AlarmManager.RTC_WAKEUP,
+                        boundaryAt + BOUNDARY_GRACE_MS,
+                        pendingIntent
+                    )
+                } catch (_: Exception) {
+                }
             }
         } catch (_: Exception) {
         }

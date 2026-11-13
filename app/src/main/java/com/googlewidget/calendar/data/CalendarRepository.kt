@@ -78,15 +78,90 @@ class CalendarRepository(private val context: Context) {
         return calendars
     }
 
+    /**
+     * In-memory cache representation of a broad queried date range.
+     */
+    data class CachedWindow(
+        val queryStart: Long,
+        val queryEnd: Long,
+        val calendarIds: Set<Long>,
+        val events: List<CalendarEvent>,
+        val cachedAt: Long
+    )
+
+    /**
+     * Retrieves calendar events for [startMillis]..[endMillis].
+     *
+     * To ensure immediate responsiveness on widget chevron navigation (eliminating
+     * repeated 200-400ms ContentResolver queries on every tap), an in-memory window
+     * with a +/- 30-day buffer is cached. Consecutive navigations within the window
+     * return instantaneously (0ms) from memory.
+     */
     fun getUpcomingEvents(
         startMillis: Long,
         endMillis: Long,
-        selectedCalendarIds: Set<Long> = emptySet()
+        selectedCalendarIds: Set<Long> = emptySet(),
+        forceRefresh: Boolean = false
     ): CalendarResult<List<CalendarEvent>> {
         if (!hasCalendarPermission()) {
             return CalendarResult.PermissionRequired
         }
 
+        val now = System.currentTimeMillis()
+        val cached = cachedWindow
+        if (!forceRefresh &&
+            cached != null &&
+            (now - cached.cachedAt) < CACHE_TTL_MILLIS &&
+            cached.calendarIds == selectedCalendarIds &&
+            cached.queryStart <= startMillis &&
+            cached.queryEnd >= endMillis
+        ) {
+            // Instant in-memory cache hit
+            val filtered = cached.events.filter { event ->
+                event.end > startMillis && event.begin < endMillis
+            }
+            android.util.Log.d("WidgetPerf", "repo CACHE HIT (${filtered.size} ev)")
+            return CalendarResult.Success(filtered)
+        }
+
+        // Query a wide window around requested bounds to buffer navigation
+        val queryStart = (startMillis - CACHE_BUFFER_MILLIS).coerceAtLeast(0L)
+        val queryEnd = (endMillis + CACHE_BUFFER_MILLIS).coerceAtMost(Long.MAX_VALUE - 1000L)
+
+        val q0 = System.currentTimeMillis()
+        val result = queryInstancesFromProvider(queryStart, queryEnd, selectedCalendarIds)
+        android.util.Log.d("WidgetPerf", "repo CACHE MISS query=${System.currentTimeMillis() - q0}ms reason=" +
+            when {
+                cached == null -> "no-cache"
+                forceRefresh -> "force"
+                (now - cached.cachedAt) >= CACHE_TTL_MILLIS -> "ttl-expired(${now - cached.cachedAt}ms)"
+                cached.calendarIds != selectedCalendarIds -> "cal-change"
+                cached.queryStart > startMillis -> "window-left"
+                cached.queryEnd < endMillis -> "window-right"
+                else -> "other"
+            })
+        if (result is CalendarResult.Success) {
+            cachedWindow = CachedWindow(
+                queryStart = queryStart,
+                queryEnd = queryEnd,
+                calendarIds = selectedCalendarIds,
+                events = result.data,
+                cachedAt = now
+            )
+            val filtered = result.data.filter { event ->
+                event.end > startMillis && event.begin < endMillis
+            }
+            return CalendarResult.Success(filtered)
+        }
+
+        return result
+    }
+
+    private fun queryInstancesFromProvider(
+        startMillis: Long,
+        endMillis: Long,
+        selectedCalendarIds: Set<Long>
+    ): CalendarResult<List<CalendarEvent>> {
         val events = mutableListOf<CalendarEvent>()
         val uriBuilder = CalendarContract.Instances.CONTENT_URI.buildUpon()
         ContentUris.appendId(uriBuilder, startMillis)
@@ -186,6 +261,15 @@ class CalendarRepository(private val context: Context) {
     }
 
     companion object {
+        const val CACHE_BUFFER_MILLIS = 30L * 24 * 60 * 60 * 1000L // 30 days buffer
+        const val CACHE_TTL_MILLIS = 60_000L // 60 seconds TTL
+
+        @Volatile
+        private var cachedWindow: CachedWindow? = null
+
+        fun clearCache() {
+            cachedWindow = null
+        }
         /**
          * Converts event timestamp to LocalDate.
          * Critical Guardrail:

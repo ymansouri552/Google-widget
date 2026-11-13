@@ -6,6 +6,9 @@ import android.content.Context
 import android.content.Intent
 import android.provider.CalendarContract
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -447,55 +450,64 @@ class ThreeDayTimelineGlanceWidget : GlanceAppWidget() {
     override val stateDefinition = PreferencesGlanceStateDefinition
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
-        val prefs = getAppWidgetState(context, PreferencesGlanceStateDefinition, id)
-        val selectedCalendarIds = prefs[WidgetConfigKeys.SELECTED_CALENDARS]
-            ?.mapNotNull { it.toLongOrNull() }
-            ?.toSet() ?: emptySet()
-        val opacity = prefs[WidgetConfigKeys.BG_OPACITY] ?: WidgetConfigKeys.DEFAULT_OPACITY
-        val themeMode = prefs[WidgetConfigKeys.THEME_MODE] ?: WidgetConfigKeys.THEME_SYSTEM
-        val dayOffset = (prefs[WidgetConfigKeys.KEY_DAY_OFFSET] ?: 0)
-            .coerceIn(WidgetConfigKeys.MIN_DAY_OFFSET, WidgetConfigKeys.MAX_DAY_OFFSET)
-        val windowStartHour = prefs[WidgetConfigKeys.KEY_WINDOW_START_HOUR]
-
+        val p0 = System.currentTimeMillis()
         val appWidgetId = try {
             GlanceAppWidgetManager(context).getAppWidgetId(id)
         } catch (_: Exception) {
             AppWidgetManager.INVALID_APPWIDGET_ID
         }
+        val initialPrefs = getAppWidgetState(context, PreferencesGlanceStateDefinition, id)
+        val initialLive = WidgetLiveState.from(initialPrefs)
+        WidgetLiveStateHub.publish(appWidgetId, initialLive)
+        android.util.Log.d("WidgetPerf", "glance prefsRead +${System.currentTimeMillis() - p0}ms")
 
+        val appContext = context.applicationContext
         val today = LocalDate.now()
-        val baseDate = today.plusDays(dayOffset.toLong())
-        val threeDays = listOf(baseDate, baseDate.plusDays(1), baseDate.plusDays(2))
-
-        val day0 = threeDays.first()
-        val day2 = threeDays.last()
-        val monthTitle = if (day0.month == day2.month && day0.year == day2.year) {
-            day0.format(DateTimeFormatter.ofPattern("MMMM", Locale.getDefault()))
-        } else if (day0.year == day2.year) {
-            "${day0.format(DateTimeFormatter.ofPattern("MMM", Locale.getDefault()))} – ${day2.format(DateTimeFormatter.ofPattern("MMM", Locale.getDefault()))}"
-        } else {
-            "${day0.format(DateTimeFormatter.ofPattern("MMM yyyy", Locale.getDefault()))} – ${day2.format(DateTimeFormatter.ofPattern("MMM yyyy", Locale.getDefault()))}"
+        val initialBase = today.plusDays(initialLive.dayOffset.toLong())
+        val initialThreeDays = listOf(initialBase, initialBase.plusDays(1), initialBase.plusDays(2))
+        val initialResult = withContext(Dispatchers.IO) {
+            CalendarRepository(appContext).getUpcomingEvents(
+                initialThreeDays.first().minusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli(),
+                initialThreeDays.last().plusDays(2).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli(),
+                initialLive.selectedCalendarIds
+            )
         }
-
-        val repository = CalendarRepository(context)
-        val startMillis = day0.minusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-        val endMillis = day2.plusDays(2).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-
-        val calendarResult = withContext(Dispatchers.IO) {
-            repository.getUpcomingEvents(startMillis, endMillis, selectedCalendarIds)
-        }
+        android.util.Log.d("WidgetPerf", "glance initial query +${System.currentTimeMillis() - p0}ms")
 
         provideContent {
+            // Live state: every tap publishes here, which recomposes this running
+            // session composition in-process. Without this, update() during a
+            // live session only re-pushes the stale content.
+            val live by WidgetLiveStateHub.flow(appWidgetId).collectAsState(initial = initialLive)
+            val now = LocalDate.now()
+            val baseDate = now.plusDays(live.dayOffset.toLong())
+            val threeDays = listOf(baseDate, baseDate.plusDays(1), baseDate.plusDays(2))
+
+            val calendarResult by produceState(
+                initialValue = initialResult,
+                key1 = threeDays,
+                key2 = live.selectedCalendarIds
+            ) {
+                android.util.Log.d("WidgetPerf", "glance requery offset=${live.dayOffset}")
+                value = withContext(Dispatchers.IO) {
+                    CalendarRepository(appContext).getUpcomingEvents(
+                        threeDays.first().minusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli(),
+                        threeDays.last().plusDays(2).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli(),
+                        live.selectedCalendarIds
+                    )
+                }
+            }
+
             ThreeDayTimelineRoot(
                 context = context,
                 appWidgetId = appWidgetId,
                 result = calendarResult,
-                today = today,
+                today = now,
                 threeDays = threeDays,
-                monthTitle = monthTitle,
-                opacity = opacity,
-                themeMode = themeMode,
-                savedWindowStartHour = windowStartHour
+                monthTitle = monthTitleFor(threeDays.first(), threeDays.last()),
+                opacity = live.bgOpacity,
+                themeMode = live.themeMode,
+                savedWindowStartHour = live.windowStartHour
             )
         }
     }
@@ -513,7 +525,7 @@ private fun ThreeDayTimelineRoot(
     themeMode: String,
     savedWindowStartHour: Int?
 ) {
-    val backgroundColor = WidgetThemeHelper.getSurfaceColor(themeMode, opacity)
+    val backgroundColor = WidgetThemeHelper.getSurfaceColor(context, themeMode, opacity)
 
     Box(
         modifier = GlanceModifier
@@ -1060,13 +1072,19 @@ private fun EmptyTimeSpacer(
         betweenEvents -> 1.dp
         else -> return
     }
+    if (heightDp <= 0.dp) return
 
-    Box(
-        modifier = GlanceModifier
-            .fillMaxWidth()
-            .height(heightDp)
-            .clickable(actionStartActivity(openCalendarAt(gridStartMillis + fromMin * 60000L)))
-    ) {}
+    // Lightweight Spacer for small gaps under 12dp to avoid creating heavy PendingIntent/action nodes
+    if (heightDp < 12.dp) {
+        Spacer(modifier = GlanceModifier.fillMaxWidth().height(heightDp))
+    } else {
+        Box(
+            modifier = GlanceModifier
+                .fillMaxWidth()
+                .height(heightDp)
+                .clickable(actionStartActivity(openCalendarAt(gridStartMillis + fromMin * 60000L)))
+        ) {}
+    }
 }
 
 private fun openCalendarAt(timeMillis: Long): Intent {
@@ -1081,9 +1099,9 @@ private fun openCalendarAt(timeMillis: Long): Intent {
 }
 
 /**
- * Draws the event once, at its exact offset and duration. All corners are
- * rounded except edges cut by the visible window, which are squared off with
- * a patch of the same color (Glance has no per-corner radius).
+ * Lean, flattened event card. Uses a single Column to eliminate nested Box-in-Box
+ * wrappers and redundant corner-patch nodes, keeping the RemoteViews tree shallow
+ * and well under Android's Binder transaction buffer limits.
  */
 @Composable
 private fun EventBox(
@@ -1096,15 +1114,7 @@ private fun EventBox(
     val onEventColor = WidgetThemeHelper.getEventTextColor(eventColor)
     val onEventTextColor = ColorProvider(onEventColor)
     val onEventTimeColor = ColorProvider(onEventColor.copy(alpha = 0.8f))
-    val radius = if (box.clampedTop || box.clampedBottom) {
-        if (heightDp > ThreeDayTimelineGlanceWidget.EVENT_CORNER_RADIUS_DP.dp) {
-            ThreeDayTimelineGlanceWidget.EVENT_CORNER_RADIUS_DP.dp
-        } else {
-            0.dp
-        }
-    } else {
-        ThreeDayTimelineGlanceWidget.EVENT_CORNER_RADIUS_DP.dp
-    }
+    val radius = if (box.clampedTop || box.clampedBottom) 3.dp else ThreeDayTimelineGlanceWidget.EVENT_CORNER_RADIUS_DP.dp
 
     val evUri = ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI, box.event.eventId)
     val viewIntent = Intent(Intent.ACTION_VIEW).apply {
@@ -1112,98 +1122,41 @@ private fun EventBox(
         flags = Intent.FLAG_ACTIVITY_NEW_TASK
     }
 
-    Box(
+    Column(
         modifier = modifier
             .height(heightDp)
-            .padding(horizontal = 1.dp),
-        contentAlignment = Alignment.TopCenter
+            .padding(horizontal = 1.dp)
+            .cornerRadius(radius)
+            .background(eventColor)
+            .clickable(actionStartActivity(viewIntent))
+            .padding(horizontal = 3.dp, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(
-            modifier = GlanceModifier
-                .fillMaxSize()
-                .cornerRadius(radius)
-                .background(eventColor)
-                .clickable(actionStartActivity(viewIntent))
-        ) {
-            if (heightDp >= ThreeDayTimelineGlanceWidget.TWO_LINE_MIN_HEIGHT_DP.dp) {
-                Column(
-                    modifier = GlanceModifier
-                        .fillMaxSize()
-                        .padding(horizontal = 4.dp, vertical = 2.dp)
-                ) {
-                    Text(
-                        text = box.event.title,
-                        style = TextStyle(
-                            color = onEventTextColor,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 10.sp
-                        ),
-                        maxLines = 1
-                    )
-                    Text(
-                        text = ThreeDayTimelineGlanceWidget.formatTimeRange(box.event.begin, box.event.end),
-                        style = TextStyle(
-                            color = onEventTimeColor,
-                            fontSize = 8.sp,
-                            fontWeight = FontWeight.Normal
-                        ),
-                        maxLines = 1
-                    )
-                }
-            } else if (heightDp >= ThreeDayTimelineGlanceWidget.MIN_TEXT_HEIGHT_DP.dp) {
-                Box(
-                    modifier = GlanceModifier
-                        .fillMaxSize()
-                        .padding(horizontal = 4.dp)
-                ) {
-                    Text(
-                        text = box.event.title,
-                        style = TextStyle(
-                            color = onEventTextColor,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 9.sp
-                        ),
-                        maxLines = 1
-                    )
-                }
-            } else if (heightDp >= ThreeDayTimelineGlanceWidget.TEXT_MIN_HEIGHT_DP.dp) {
-                Box(
-                    modifier = GlanceModifier
-                        .fillMaxSize()
-                        .padding(horizontal = 3.dp)
-                ) {
-                    Text(
-                        text = box.event.title,
-                        style = TextStyle(
-                            color = onEventTextColor,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 8.sp
-                        ),
-                        maxLines = 1
-                    )
-                }
+        if (heightDp >= ThreeDayTimelineGlanceWidget.TEXT_MIN_HEIGHT_DP.dp) {
+            val titleSize = when {
+                heightDp >= ThreeDayTimelineGlanceWidget.TWO_LINE_MIN_HEIGHT_DP.dp -> 10.sp
+                heightDp >= ThreeDayTimelineGlanceWidget.MIN_TEXT_HEIGHT_DP.dp -> 9.sp
+                else -> 8.sp
             }
-        }
-
-        if (box.clampedTop && radius > 0.dp) {
-            Box(
-                modifier = GlanceModifier
-                    .fillMaxWidth()
-                    .height(ThreeDayTimelineGlanceWidget.EVENT_CORNER_RADIUS_DP.dp)
-                    .background(eventColor)
-            ) {}
-        }
-        if (box.clampedBottom && radius > 0.dp) {
-            Box(
-                modifier = GlanceModifier.fillMaxSize(),
-                contentAlignment = Alignment.BottomCenter
-            ) {
-                Box(
-                    modifier = GlanceModifier
-                        .fillMaxWidth()
-                        .height(ThreeDayTimelineGlanceWidget.EVENT_CORNER_RADIUS_DP.dp)
-                        .background(eventColor)
-                ) {}
+            Text(
+                text = box.event.title,
+                style = TextStyle(
+                    color = onEventTextColor,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = titleSize
+                ),
+                maxLines = 1
+            )
+            if (heightDp >= ThreeDayTimelineGlanceWidget.TWO_LINE_MIN_HEIGHT_DP.dp) {
+                Text(
+                    text = ThreeDayTimelineGlanceWidget.formatTimeRange(box.event.begin, box.event.end),
+                    style = TextStyle(
+                        color = onEventTimeColor,
+                        fontSize = 8.sp,
+                        fontWeight = FontWeight.Normal
+                    ),
+                    maxLines = 1
+                )
             }
         }
     }
