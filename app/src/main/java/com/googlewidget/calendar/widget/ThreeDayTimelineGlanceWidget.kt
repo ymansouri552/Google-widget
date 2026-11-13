@@ -157,6 +157,12 @@ class ThreeDayTimelineGlanceWidget : GlanceAppWidget() {
         // to a shifted hour window; the window itself renders at the 0.6 floor.
         const val MIN_DP_PER_MINUTE = 0.6f
         const val FULL_FIT_MIN_DP_PER_MINUTE = 0.28f
+
+        // Upper bound of the time scale. Without it, few/short events produce a
+        // huge exact-fit scale and the day's events stretch to fill the whole
+        // widget. 1 dp per minute (60dp per hour) keeps events a readable,
+        // natural size; leftover height simply stays empty below the grid.
+        const val MAX_DP_PER_MINUTE = 1.0f
         const val WINDOW_SHIFT_HOURS = 2
 
         // Most aggressive stretch used when computing the axis, so a later
@@ -387,7 +393,11 @@ class ThreeDayTimelineGlanceWidget : GlanceAppWidget() {
             dpPerMinute: Float
         ): Boolean = expandedMinutes * dpPerMinute + totalStripHeightDp <= availableHeightDp
 
-        /** Scale for the axis: exact fit when possible, clamped to [minDpPerMinute]. */
+        /**
+         * Scale for the axis: exact fit when possible, clamped to
+         * [MIN_DP_PER_MINUTE] and [MAX_DP_PER_MINUTE] so a day with few or
+         * short events never stretches them to fill the widget.
+         */
         fun calculateDpPerMinute(
             availableHeightDp: Float,
             totalStripHeightDp: Float,
@@ -395,7 +405,8 @@ class ThreeDayTimelineGlanceWidget : GlanceAppWidget() {
             minDpPerMinute: Float = MIN_DP_PER_MINUTE
         ): Float {
             if (expandedMinutes <= 0) return minDpPerMinute
-            return maxOf(minDpPerMinute, (availableHeightDp - totalStripHeightDp) / expandedMinutes)
+            return ((availableHeightDp - totalStripHeightDp) / expandedMinutes)
+                .coerceIn(minDpPerMinute, MAX_DP_PER_MINUTE)
         }
 
         /** Events stretch toward the minimum readable text height, capped by the axis stretch. */

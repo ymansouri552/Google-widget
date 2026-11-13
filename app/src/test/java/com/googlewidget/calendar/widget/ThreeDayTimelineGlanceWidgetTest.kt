@@ -104,9 +104,15 @@ class ThreeDayTimelineGlanceWidgetTest {
 
     @Test
     fun testDpPerMinute_exactFit_thenClampedToMinimum() {
-        // (600 - 24 strips) / 540 expanded minutes = 1.0667 dp per minute.
+        // (600 - 24 strips) / 540 expanded minutes = 1.0667 dp per minute,
+        // but the scale never exceeds MAX_DP_PER_MINUTE so few/short events
+        // cannot stretch to fill the widget.
         val scale = ThreeDayTimelineGlanceWidget.calculateDpPerMinute(600f, 24f, 540)
-        assertEquals((600f - 24f) / 540f, scale, 1e-4f)
+        assertEquals(ThreeDayTimelineGlanceWidget.MAX_DP_PER_MINUTE, scale, 1e-4f)
+
+        // A moderate day still gets its exact-fit scale (between floor and cap).
+        val exactFit = ThreeDayTimelineGlanceWidget.calculateDpPerMinute(600f, 24f, 800)
+        assertEquals((600f - 24f) / 800f, exactFit, 1e-4f)
 
         // Not enough height: the scale bottoms out at 0.6 dp per minute.
         assertEquals(ThreeDayTimelineGlanceWidget.MIN_DP_PER_MINUTE,
