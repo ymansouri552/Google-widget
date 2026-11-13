@@ -97,6 +97,7 @@ class ResetDateOffsetAction : ActionCallback {
         updateAppWidgetState(context, PreferencesGlanceStateDefinition, glanceId) { prefs ->
             prefs.toMutablePreferences().apply {
                 this[WidgetConfigKeys.KEY_DAY_OFFSET] = 0
+                this.remove(WidgetConfigKeys.KEY_WINDOW_START_HOUR)
             }
         }
         updateOwningWidget(context, glanceId)
@@ -118,5 +119,34 @@ class NavigateDateOffsetAction : ActionCallback {
             updateDayOffset(prefs, delta)
         }
         updateOwningWidget(context, glanceId)
+    }
+}
+
+/**
+ * Shifts the 3-Day timeline's visible hour window by [KEY_DELTA] hours when the
+ * widget is too small to fit the full range at minimum scale. The start hour is
+ * clamped to the widget's absolute range bounds; the renderer re-clamps it to
+ * the actual computed range when it falls outside.
+ */
+class ThreeDayWindowShiftAction : ActionCallback {
+    companion object {
+        val KEY_DELTA = ActionParameters.Key<Int>("window_delta")
+    }
+
+    override suspend fun onAction(
+        context: Context,
+        glanceId: GlanceId,
+        parameters: ActionParameters
+    ) {
+        val delta = parameters[KEY_DELTA] ?: 0
+        updateAppWidgetState(context, PreferencesGlanceStateDefinition, glanceId) { prefs ->
+            prefs.toMutablePreferences().apply {
+                val current = prefs[WidgetConfigKeys.KEY_WINDOW_START_HOUR]
+                    ?: ThreeDayTimelineGlanceWidget.RANGE_EARLIEST_HOUR
+                this[WidgetConfigKeys.KEY_WINDOW_START_HOUR] =
+                    ThreeDayTimelineGlanceWidget.shiftedWindowStartHour(current, delta)
+            }
+        }
+        ThreeDayTimelineGlanceWidget().update(context, glanceId)
     }
 }
