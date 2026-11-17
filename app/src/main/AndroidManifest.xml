@@ -24,6 +24,12 @@
             </intent-filter>
         </activity>
 
+        <!-- Widget Theme Picker -->
+        <activity
+            android:name=".ui.ThemeActivity"
+            android:exported="false"
+            android:label="@string/theme_screen_title" />
+
         <!-- Widget Configuration Activity -->
         <activity
             android:name=".ui.WidgetConfigActivity"

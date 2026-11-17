@@ -19,6 +19,7 @@
     <string name="refresh">Refresh</string>
     <string name="add_event">Add Event</string>
     <string name="configure_widget">Configure Widget</string>
+    <string name="theme_screen_title">Widget theme</string>
     <string name="select_calendars">Select Calendars</string>
     <string name="background_opacity">Background Opacity</string>
     <string name="theme_mode">Theme</string>

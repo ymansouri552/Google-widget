@@ -2,11 +2,14 @@ package com.googlewidget.calendar.widget
 
 import androidx.compose.ui.unit.dp
 import com.googlewidget.calendar.data.CalendarEvent
+import com.googlewidget.calendar.ui.theme.CalendarThemes
+import com.googlewidget.calendar.ui.theme.EventFamily
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.ZoneId
 
 class ThreeDayTimelineGlanceWidgetTest {
@@ -362,5 +365,55 @@ class ThreeDayTimelineGlanceWidgetTest {
         // All 6 events must be laid out in the day column
         val totalBoxes = dayLayout.flatMap { it.lanes }.flatten().size
         assertEquals(6, totalBoxes)
+    }
+
+    @Test
+    fun visibleHours_roundEarliestDownAndLatestUp() {
+        val events = listOf(
+            event(1, "Teen 5", timeMillis(today, 9, 30), timeMillis(today, 10, 15)),
+            event(2, "301", timeMillis(today, 17, 45), timeMillis(today, 18, 15))
+        )
+        assertEquals(
+            9..18,
+            ThreeDayTimelineGlanceWidget.calculateVisibleHours(threeDays, events, zone = zone)
+        )
+    }
+
+    @Test
+    fun visibleHours_minimumSpanIsFourHours() {
+        val events = listOf(event(1, "Teen 5", timeMillis(today, 16, 45), timeMillis(today, 18, 15)))
+        assertEquals(
+            16..19,
+            ThreeDayTimelineGlanceWidget.calculateVisibleHours(threeDays, events, zone = zone)
+        )
+    }
+
+    @Test
+    fun visibleHours_withoutEvents_usesCurrentHour() {
+        val window = ThreeDayTimelineGlanceWidget.calculateVisibleHours(
+            threeDays,
+            emptyList(),
+            now = LocalDate.of(2026, 11, 10).atTime(13, 20),
+            zone = zone
+        )
+        assertEquals(13..16, window)
+    }
+
+    @Test
+    fun visibleHours_clampsAtEndOfDay() {
+        val events = listOf(event(1, "Late", timeMillis(today, 22, 0), timeMillis(today, 23, 30)))
+        assertEquals(
+            20..23,
+            ThreeDayTimelineGlanceWidget.calculateVisibleHours(threeDays, events, zone = zone)
+        )
+    }
+
+    @Test
+    fun themeFamily_teenPrefixWins_andOtherTitlesAreStable() {
+        assertEquals(EventFamily.TEEN, CalendarThemes.familyFor("Teen 5"))
+        assertEquals(EventFamily.TEEN, CalendarThemes.familyFor("Teen 4"))
+        val first = CalendarThemes.familyFor("301")
+        assertEquals(first, CalendarThemes.familyFor("301"))
+        assertEquals(CalendarThemes.familyFor("103"), CalendarThemes.familyFor("103"))
     }
 }

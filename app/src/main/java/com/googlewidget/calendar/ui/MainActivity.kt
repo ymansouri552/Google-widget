@@ -34,6 +34,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -204,6 +205,9 @@ fun MainScreen() {
             TopAppBar(
                 title = { Text("Calendar Widgets") },
                 actions = {
+                    IconButton(onClick = { context.startActivity(Intent(context, ThemeActivity::class.java)) }) {
+                        Icon(Icons.Default.Palette, contentDescription = "Widget theme")
+                    }
                     IconButton(onClick = { refreshAll() }) {
                         Icon(Icons.Default.Refresh, contentDescription = "Force Refresh")
                     }

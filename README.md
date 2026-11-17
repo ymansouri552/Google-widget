@@ -26,6 +26,19 @@ A production-ready native Android application built with **Kotlin**, **Jetpack C
 * **Background Opacity:** Adjustable slider from 0% (fully transparent) to 100% (solid).
 * **Lookahead Range & Typography:** Choose 7, 14, or 30 days lookahead and Normal vs. Compact font scaling.
 
+### 3b. Widget Themes (`ThemeActivity`)
+* **Four choices:** Soft pastel, Midnight, Glass, and Auto (Glass in light mode, Midnight in dark mode).
+* **Live previews:** Every card renders the sample events (Teen 5, Teen 4, 301, 103) with that theme's colors, and Glass previews sit on a teal wallpaper so the translucency is visible.
+* **One-tap apply:** The choice is saved app-wide (SharedPreferences) and every placed widget is refreshed immediately; Auto also refreshes on system light/dark changes.
+
+### 3c. 3-Day Timeline Widget (`ThreeDayTimelineGlanceWidget`)
+* **Minute-accurate timeline:** Every event is one continuous rounded box positioned by its start minute; an event that crosses an hour boundary is never split into per-hour rows.
+* **Auto-fit hours:** The visible range spans the shown days' earliest start to latest end, rounded to whole hours with a 4-hour minimum.
+* **Hour grid:** Hour labels on the left, faint dotted hour lines across the columns, and a tinted today column.
+* **Overlap lanes:** Concurrent events split the day column side by side.
+* **Theme tokens:** Every color comes from a `CalendarTheme` object, including event families; "Teen…" titles always use the teen family and other titles get a stable A/B color from a title hash.
+
+
 ### 4. Background Sync & Content Observers
 * **WorkManager ContentUri Trigger (`CalendarSyncWorker`):** Observes `CalendarContract.CONTENT_URI` changes with a 2-second debounce, triggering immediate widget updates when events are added, edited, or deleted in Google Calendar.
 * **System Event Receiver (`CalendarBroadcastReceiver`):** Automatically refreshes widgets upon `TIME_SET`, `TIMEZONE_CHANGED`, `DATE_CHANGED`, `BOOT_COMPLETED`, and `PROVIDER_CHANGED`.
@@ -45,6 +58,18 @@ A production-ready native Android application built with **Kotlin**, **Jetpack C
 * **All-Day Event Timezone Integrity:** Correctly handles `ALL_DAY == 1` events (stored in UTC midnight) with `ZoneOffset.UTC`, while timed events use `ZoneId.systemDefault()`, preventing date shift anomalies across timezones.
 * **Fast `provideGlance` IO Preloading:** Reads DataStore preferences and queries calendar data on `Dispatchers.IO` *prior* to composing UI within `provideContent`.
 * **Strict Glance Scoping:** Widget UI files exclusively utilize Glance layouts, modifiers, and text components without conflicting standard Compose Foundation or Compose Material 3 elements.
+
+---
+
+## Adding a new theme
+
+All widget colors live in `app/src/main/java/com/googlewidget/calendar/ui/theme/CalendarThemes.kt`:
+
+1. Copy one of the existing `CalendarTheme(...)` blocks and give it a new `id` and `label`.
+2. Fill in the tokens: `bg`, `text`, `sub`, `grid`, `todayCol`, `todayCircleBg` / `todayCircleText`, `chipBg` / `chipText`, and the `teen`, `a`, `b` event families (each with `fill`, `bar`, `title`, `time`).
+3. Append it to `CalendarThemes.selectable`.
+
+That is the whole change. The widget renderer and the Theme screen both read the token object, so the new theme appears as a preview card and applies live. Widget code must not declare `Color(...)` values of its own: add a token instead. To change how titles map to event families (for example by grade level), edit only `CalendarThemes.familyFor(title)`.
 
 ---
 
