@@ -2,12 +2,18 @@ package com.googlewidget.calendar.widget
 
 import android.content.Context
 import android.content.res.Configuration
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.sp
 import androidx.glance.unit.ColorProvider
-import com.googlewidget.calendar.R
+import com.googlewidget.calendar.data.ThemePreferences
+import com.googlewidget.calendar.data.ThemeSelection
 import com.googlewidget.calendar.data.WidgetConfigKeys
+import com.googlewidget.calendar.ui.theme.CalendarTheme
+import com.googlewidget.calendar.ui.theme.CalendarThemes
 
 data class WidgetTypography(
     val titleSize: TextUnit,
@@ -17,25 +23,15 @@ data class WidgetTypography(
     val badgeSize: TextUnit
 )
 
+/**
+ * Shared by all four widget types so the app-wide theme picker colors every
+ * view, not just the 3-Day Timeline. Every color comes from a [CalendarTheme]
+ * token; there are no per-widget color literals.
+ */
 object WidgetThemeHelper {
 
-    /**
-     * Calendar events inherit their calendar's display color, which can be near-white
-     * (e.g. light yellow, white). Text drawn directly on the event color must adapt:
-     * this returns dark ink on bright event colors and white on dark ones.
-     */
-    fun getEventTextColor(eventColor: Color): Color {
-        val red = eventColor.red
-        val green = eventColor.green
-        val blue = eventColor.blue
-        // Perceived brightness (sRGB weights) — linearization is unnecessary here
-        // because we only need a coarse bright/dark split for readability.
-        val brightness = 0.299f * red + 0.587f * green + 0.114f * blue
-        return if (brightness > 0.6f) Color(0xFF202124) else Color.White
-    }
-
-    fun getTypography(fontScale: String): WidgetTypography {
-        return if (fontScale == WidgetConfigKeys.FONT_SCALE_COMPACT) {
+    fun getTypography(fontScale: String): WidgetTypography =
+        if (fontScale == WidgetConfigKeys.FONT_SCALE_COMPACT) {
             WidgetTypography(
                 titleSize = 13.sp,
                 subtitleSize = 11.sp,
@@ -52,77 +48,38 @@ object WidgetThemeHelper {
                 badgeSize = 11.sp
             )
         }
+
+    /**
+     * Resolves the app-wide theme and observes it inside the composition, so a
+     * still-alive Glance session repaints the moment the user switches themes
+     * or the system flips between light and dark (Auto).
+     */
+    @Composable
+    fun currentCalendarTheme(context: Context): CalendarTheme {
+        ThemePreferences.ensureLoaded(context)
+        val selection by ThemePreferences.selection.collectAsState(
+            initial = ThemeSelection(ThemePreferences.getSelectedId(context))
+        )
+        val systemDark =
+            (context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
+                Configuration.UI_MODE_NIGHT_YES
+        return CalendarThemes.resolve(selection.themeId, systemDark)
     }
 
-    fun isDarkTheme(context: Context?, themeMode: String): Boolean {
-        return when (themeMode) {
-            WidgetConfigKeys.THEME_LIGHT -> false
-            WidgetConfigKeys.THEME_DARK -> true
-            else -> {
-                if (context == null) true
-                else {
-                    val nightMode = context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
-                    nightMode == Configuration.UI_MODE_NIGHT_YES
-                }
-            }
-        }
-    }
+    /** The theme surface with the per-widget background-opacity slider applied. */
+    fun getSurfaceColor(theme: CalendarTheme, opacity: Float): Color =
+        theme.bg.copy(alpha = theme.bg.alpha * opacity.coerceIn(0f, 1f))
 
-    fun getSurfaceColor(context: Context?, themeMode: String, opacity: Float): Color {
-        val alpha = opacity.coerceIn(0.0f, 1.0f)
-        val isDark = isDarkTheme(context, themeMode)
-        return if (isDark) {
-            Color(0.12f, 0.13f, 0.14f, alpha)
-        } else {
-            Color(0.98f, 0.98f, 0.99f, alpha)
-        }
-    }
+    /** A raised card on top of the surface; slightly softer than the surface. */
+    fun getCardBackgroundColor(theme: CalendarTheme, opacity: Float): Color =
+        theme.chipBg.copy(alpha = theme.chipBg.alpha * (opacity * 0.85f).coerceIn(0f, 1f))
 
-    fun getSurfaceColor(themeMode: String, opacity: Float): Color =
-        getSurfaceColor(null, themeMode, opacity)
+    fun getPrimaryTextColor(theme: CalendarTheme): ColorProvider = ColorProvider(theme.text)
+    fun getSecondaryTextColor(theme: CalendarTheme): ColorProvider = ColorProvider(theme.sub)
 
-    fun getCardBackgroundColor(context: Context?, themeMode: String, opacity: Float): Color {
-        val alpha = (opacity * 0.85f).coerceIn(0.0f, 1.0f)
-        val isDark = isDarkTheme(context, themeMode)
-        return if (isDark) {
-            Color(0.18f, 0.19f, 0.20f, alpha)
-        } else {
-            Color(1.0f, 1.0f, 1.0f, alpha)
-        }
-    }
+    /** Accent used for the today badge and emphasis; its ink is theme-aware too. */
+    fun getAccentColor(theme: CalendarTheme): ColorProvider = ColorProvider(theme.todayCircleBg)
+    fun getAccentTextColor(theme: CalendarTheme): ColorProvider = ColorProvider(theme.todayCircleText)
 
-    fun getCardBackgroundColor(themeMode: String, opacity: Float): Color =
-        getCardBackgroundColor(null, themeMode, opacity)
-
-    fun getPrimaryTextColor(themeMode: String): ColorProvider {
-        return when (themeMode) {
-            WidgetConfigKeys.THEME_LIGHT -> ColorProvider(Color(0xFF202124))
-            WidgetConfigKeys.THEME_DARK -> ColorProvider(Color(0xFFE8EAED))
-            else -> ColorProvider(R.color.text_primary)
-        }
-    }
-
-    fun getSecondaryTextColor(themeMode: String): ColorProvider {
-        return when (themeMode) {
-            WidgetConfigKeys.THEME_LIGHT -> ColorProvider(Color(0xFF5F6368))
-            WidgetConfigKeys.THEME_DARK -> ColorProvider(Color(0xFF9AA0A6))
-            else -> ColorProvider(R.color.text_secondary)
-        }
-    }
-
-    fun getAccentColor(themeMode: String): ColorProvider {
-        return when (themeMode) {
-            WidgetConfigKeys.THEME_LIGHT -> ColorProvider(Color(0xFF1A73E8))
-            WidgetConfigKeys.THEME_DARK -> ColorProvider(Color(0xFF8AB4F8))
-            else -> ColorProvider(R.color.accent_color)
-        }
-    }
-
-    fun getDividerColor(themeMode: String): ColorProvider {
-        return when (themeMode) {
-            WidgetConfigKeys.THEME_LIGHT -> ColorProvider(Color(0xFFE0E0E0))
-            WidgetConfigKeys.THEME_DARK -> ColorProvider(Color(0xFF3C4043))
-            else -> ColorProvider(R.color.divider_color)
-        }
-    }
+    fun getDividerColor(theme: CalendarTheme): ColorProvider = ColorProvider(theme.grid)
 }

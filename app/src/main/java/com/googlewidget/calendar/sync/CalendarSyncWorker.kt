@@ -14,6 +14,7 @@ import com.googlewidget.calendar.widget.AgendaGlanceWidget
 import com.googlewidget.calendar.widget.NextUpGlanceWidget
 import com.googlewidget.calendar.widget.WeeklyCalendarGlanceWidget
 import com.googlewidget.calendar.widget.ThreeDayTimelineGlanceWidget
+import com.googlewidget.calendar.widget.WidgetClock
 import com.googlewidget.calendar.widget.WidgetPlacement
 import java.util.concurrent.TimeUnit
 
@@ -25,6 +26,9 @@ class CalendarSyncWorker(
     override suspend fun doWork(): Result {
         return try {
             CalendarRepository.clearCache()
+            // Live Glance sessions do not re-run provideGlance on update(); the
+            // clock revision makes their compositions recompute time text.
+            WidgetClock.tick()
             // Re-render every placed widget instance; skipped entirely when no
             // widget is on screen so calendar churn is cheap for everyone else.
             if (WidgetPlacement.hasAnyWidget(context)) {

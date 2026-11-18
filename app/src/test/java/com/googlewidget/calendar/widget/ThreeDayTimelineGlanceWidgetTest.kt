@@ -2,6 +2,7 @@ package com.googlewidget.calendar.widget
 
 import androidx.compose.ui.unit.dp
 import com.googlewidget.calendar.data.CalendarEvent
+import com.googlewidget.calendar.data.CalendarRepository
 import com.googlewidget.calendar.ui.theme.CalendarThemes
 import com.googlewidget.calendar.ui.theme.EventFamily
 import org.junit.Assert.assertEquals
@@ -11,6 +12,8 @@ import org.junit.Test
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneId
+import java.time.ZoneOffset
+import java.util.Locale
 
 class ThreeDayTimelineGlanceWidgetTest {
 
@@ -38,6 +41,10 @@ class ThreeDayTimelineGlanceWidgetTest {
     )
 
     private fun timeMillis(date: LocalDate, hour: Int, minute: Int): Long {
+        return date.atTime(hour, minute).atZone(zone).toInstant().toEpochMilli()
+    }
+
+    private fun timeMillis(date: LocalDate, hour: Int, minute: Int, zone: ZoneId): Long {
         return date.atTime(hour, minute).atZone(zone).toInstant().toEpochMilli()
     }
 
@@ -380,11 +387,28 @@ class ThreeDayTimelineGlanceWidgetTest {
     }
 
     @Test
-    fun visibleHours_minimumSpanIsFourHours() {
+    fun visibleHours_minimumSpanIsEightHours() {
         val events = listOf(event(1, "Teen 5", timeMillis(today, 16, 45), timeMillis(today, 18, 15)))
         assertEquals(
-            16..19,
+            16..23,
             ThreeDayTimelineGlanceWidget.calculateVisibleHours(threeDays, events, zone = zone)
+        )
+    }
+
+    @Test
+    fun visibleHours_hourSettingsClampTheWindow() {
+        val events = listOf(event(1, "Teen 5", timeMillis(today, 16, 45), timeMillis(today, 18, 15)))
+        assertEquals(
+            12..19,
+            ThreeDayTimelineGlanceWidget.calculateVisibleHours(
+                threeDays, events, zone = zone, minHour = 12, maxHour = 19
+            )
+        )
+        assertEquals(
+            10..17,
+            ThreeDayTimelineGlanceWidget.calculateVisibleHours(
+                threeDays, events, zone = zone, maxHour = 17
+            )
         )
     }
 
@@ -396,16 +420,163 @@ class ThreeDayTimelineGlanceWidgetTest {
             now = LocalDate.of(2026, 11, 10).atTime(13, 20),
             zone = zone
         )
-        assertEquals(13..16, window)
+        assertEquals(13..20, window)
     }
 
     @Test
     fun visibleHours_clampsAtEndOfDay() {
         val events = listOf(event(1, "Late", timeMillis(today, 22, 0), timeMillis(today, 23, 30)))
         assertEquals(
-            20..23,
+            16..23,
             ThreeDayTimelineGlanceWidget.calculateVisibleHours(threeDays, events, zone = zone)
         )
+    }
+
+    // --- Phase 1: navigation state -----------------------------------------------------------
+
+    @Test
+    fun viewOffset_clampsToMinus30AndPlus90() {
+        assertEquals(-30, ThreeDayTimelineGlanceWidget.clampViewOffsetDays(-31))
+        assertEquals(-30, ThreeDayTimelineGlanceWidget.clampViewOffsetDays(Int.MIN_VALUE))
+        assertEquals(90, ThreeDayTimelineGlanceWidget.clampViewOffsetDays(91))
+        assertEquals(90, ThreeDayTimelineGlanceWidget.clampViewOffsetDays(Int.MAX_VALUE))
+        assertEquals(0, ThreeDayTimelineGlanceWidget.clampViewOffsetDays(0))
+    }
+
+    @Test
+    fun chevronStep_usesConfiguredStep_andClamps() {
+        assertEquals(3, ThreeDayTimelineGlanceWidget.chevronOffsetAfter(0, +1, 3))
+        assertEquals(-3, ThreeDayTimelineGlanceWidget.chevronOffsetAfter(0, -1, 3))
+        assertEquals(1, ThreeDayTimelineGlanceWidget.chevronOffsetAfter(0, +1, 1))
+        assertEquals(90, ThreeDayTimelineGlanceWidget.chevronOffsetAfter(89, +1, 3))
+        assertEquals(-30, ThreeDayTimelineGlanceWidget.chevronOffsetAfter(-29, -1, 3))
+    }
+
+    @Test
+    fun viewOffset_autoResetsAfterTenMinutes() {
+        val now = 1_000_000_000L
+
+        assertEquals(
+            "just under ten minutes keeps the picked window",
+            6,
+            ThreeDayTimelineGlanceWidget.effectiveViewOffsetDays(6, now - 9 * 60_000L, now)
+        )
+        assertEquals(
+            "exactly ten minutes still keeps it (> is strict)",
+            6,
+            ThreeDayTimelineGlanceWidget.effectiveViewOffsetDays(6, now - 10 * 60_000L, now)
+        )
+        assertEquals(
+            "past ten minutes snaps back to today",
+            0,
+            ThreeDayTimelineGlanceWidget.effectiveViewOffsetDays(6, now - 10 * 60_000L - 1L, now)
+        )
+        assertEquals(
+            "never interacted means today",
+            0,
+            ThreeDayTimelineGlanceWidget.effectiveViewOffsetDays(6, 0L, now)
+        )
+        assertEquals(
+            "offset zero is always today",
+            0,
+            ThreeDayTimelineGlanceWidget.effectiveViewOffsetDays(0, now, now)
+        )
+    }
+
+    @Test
+    fun rangeLabel_formatsMonthAndYearBoundaries() {
+        assertEquals(
+            "18-20 Nov",
+            ThreeDayTimelineGlanceWidget.formatRangeLabel(
+                LocalDate.of(2026, 11, 18),
+                LocalDate.of(2026, 11, 20),
+                Locale.ENGLISH
+            )
+        )
+        assertEquals(
+            "28 Nov - 1 Dec",
+            ThreeDayTimelineGlanceWidget.formatRangeLabel(
+                LocalDate.of(2026, 11, 28),
+                LocalDate.of(2026, 12, 1),
+                Locale.ENGLISH
+            )
+        )
+        assertEquals(
+            "30 Dec 2026 - 1 Jan 2027",
+            ThreeDayTimelineGlanceWidget.formatRangeLabel(
+                LocalDate.of(2026, 12, 30),
+                LocalDate.of(2027, 1, 1),
+                Locale.ENGLISH
+            )
+        )
+    }
+
+    // --- Phase 1: query/date edge cases ------------------------------------------------------
+
+    @Test
+    fun allDayEvent_usesUtcDate_andDoesNotAffectVisibleHours() {
+        val allDay = event(
+            id = 1L,
+            title = "Holiday",
+            begin = today.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli(),
+            end = today.plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli(),
+            allDay = true
+        )
+
+        assertEquals(today, CalendarRepository.getEventLocalDate(allDay))
+        assertEquals(
+            "all-day events must not resize the timed grid",
+            13..20,
+            ThreeDayTimelineGlanceWidget.calculateVisibleHours(
+                threeDays,
+                listOf(allDay),
+                now = today.atTime(13, 20),
+                zone = zone
+            )
+        )
+    }
+
+    @Test
+    fun dstChange_insideVisibleWindow_keepsLocalHoursAndShortDay() {
+        val newYork = ZoneId.of("America/New_York")
+        // 2026-03-08: clocks spring forward at 02:00 local.
+        val dstDay = LocalDate.of(2026, 3, 8)
+        val crossing = event(
+            id = 1L,
+            title = "DST class",
+            begin = timeMillis(dstDay, 1, 30, newYork),
+            end = timeMillis(dstDay, 3, 15, newYork)
+        )
+
+        assertEquals(
+            1..8,
+            ThreeDayTimelineGlanceWidget.calculateVisibleHours(
+                listOf(dstDay),
+                listOf(crossing),
+                now = dstDay.atTime(12, 0),
+                zone = newYork
+            )
+        )
+
+        val (gridStart, gridEnd) = ThreeDayTimelineGlanceWidget.gridBoundsForDay(
+            date = dstDay,
+            minHour = 0,
+            maxHour = 23,
+            zone = newYork
+        )
+        assertEquals(
+            "spring-forward day is 23 real hours long",
+            23 * 60 * 60 * 1000L,
+            gridEnd - gridStart
+        )
+    }
+
+    @Test
+    fun rtlTitles_detectedForPersianAndArabic_butNotLatin() {
+        assertTrue(isRightToLeftTitle("کلاس ریاضی"))
+        assertTrue(isRightToLeftTitle("رياضيات 301"))
+        assertFalse(isRightToLeftTitle("Teen 5"))
+        assertFalse(isRightToLeftTitle("301"))
     }
 
     @Test

@@ -4,7 +4,7 @@ import android.content.ContentUris
 import android.content.Context
 import android.content.Intent
 import android.provider.CalendarContract
-import androidx.compose.ui.graphics.Color
+import androidx.glance.ColorFilter
 import androidx.compose.ui.unit.dp
 import androidx.datastore.preferences.core.Preferences
 import androidx.glance.GlanceId
@@ -43,6 +43,7 @@ import com.googlewidget.calendar.data.CalendarRepository
 import com.googlewidget.calendar.data.CalendarResult
 import com.googlewidget.calendar.data.WidgetConfigKeys
 import com.googlewidget.calendar.ui.MainActivity
+import com.googlewidget.calendar.ui.theme.CalendarTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import com.googlewidget.calendar.sync.NextUpRefreshScheduler
@@ -59,7 +60,6 @@ class NextUpGlanceWidget : GlanceAppWidget() {
             ?.mapNotNull { it.toLongOrNull() }
             ?.toSet() ?: emptySet()
         val opacity = prefs[WidgetConfigKeys.BG_OPACITY] ?: WidgetConfigKeys.DEFAULT_OPACITY
-        val themeMode = prefs[WidgetConfigKeys.THEME_MODE] ?: WidgetConfigKeys.THEME_SYSTEM
         val fontScale = prefs[WidgetConfigKeys.FONT_SCALE] ?: WidgetConfigKeys.FONT_SCALE_NORMAL
 
         // Fast provideGlance execution: load calendar data on IO before provideContent
@@ -83,7 +83,7 @@ class NextUpGlanceWidget : GlanceAppWidget() {
                 context = context,
                 result = calendarResult,
                 opacity = opacity,
-                themeMode = themeMode,
+                theme = WidgetThemeHelper.currentCalendarTheme(context),
                 fontScale = fontScale,
                 now = now
             )
@@ -96,12 +96,12 @@ private fun NextUpWidgetRoot(
     context: Context,
     result: CalendarResult<List<CalendarEvent>>,
     opacity: Float,
-    themeMode: String,
+    theme: CalendarTheme,
     fontScale: String,
     now: Long
 ) {
     val typography = WidgetThemeHelper.getTypography(fontScale)
-    val backgroundColor = WidgetThemeHelper.getSurfaceColor(context, themeMode, opacity)
+    val backgroundColor = WidgetThemeHelper.getSurfaceColor(theme, opacity)
 
     Box(
         modifier = GlanceModifier
@@ -113,15 +113,15 @@ private fun NextUpWidgetRoot(
     ) {
         when (result) {
             is CalendarResult.PermissionRequired -> {
-                PermissionStrip(context, themeMode, typography)
+                PermissionStrip(context, theme, typography)
             }
             is CalendarResult.Error -> {
-                ErrorStrip(result.throwable.localizedMessage ?: "Error", themeMode, typography)
+                ErrorStrip(result.throwable.localizedMessage ?: "Error", theme, typography)
             }
             is CalendarResult.Success -> {
                 NextUpContent(
                     events = result.data,
-                    themeMode = themeMode,
+                    theme = theme,
                     opacity = opacity,
                     typography = typography,
                     now = now
@@ -134,7 +134,7 @@ private fun NextUpWidgetRoot(
 @androidx.compose.runtime.Composable
 private fun NextUpContent(
     events: List<CalendarEvent>,
-    themeMode: String,
+    theme: CalendarTheme,
     opacity: Float,
     typography: WidgetTypography,
     now: Long
@@ -153,12 +153,12 @@ private fun NextUpContent(
     }
 
     if (nextEvent == null) {
-        EmptyNextUpStrip(themeMode, opacity, typography)
+        EmptyNextUpStrip(theme, opacity, typography)
     } else {
         ActiveNextUpStrip(
             nextEvent = nextEvent,
             otherCountToday = otherEventsToday.size,
-            themeMode = themeMode,
+            theme = theme,
             opacity = opacity,
             typography = typography,
             now = now
@@ -170,7 +170,7 @@ private fun NextUpContent(
 private fun ActiveNextUpStrip(
     nextEvent: CalendarEvent,
     otherCountToday: Int,
-    themeMode: String,
+    theme: CalendarTheme,
     opacity: Float,
     typography: WidgetTypography,
     now: Long
@@ -182,6 +182,7 @@ private fun ActiveNextUpStrip(
         flags = Intent.FLAG_ACTIVITY_NEW_TASK
     }
 
+    val family = theme.eventColors(nextEvent.title)
     val countdownText = CalendarRepository.formatNextUpCountdown(nextEvent, now)
     val secondaryText = when {
         otherCountToday == 1 -> "1 other event today"
@@ -195,12 +196,12 @@ private fun ActiveNextUpStrip(
             .clickable(actionStartActivity(clickIntent)),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Vertical accent bar
+        // Event family bar
         Box(
             modifier = GlanceModifier
                 .width(4.dp)
                 .height(44.dp)
-                .background(Color(nextEvent.color))
+                .background(family.bar)
                 .cornerRadius(2.dp)
         ) {}
 
@@ -215,7 +216,7 @@ private fun ActiveNextUpStrip(
             Text(
                 text = nextEvent.title,
                 style = TextStyle(
-                    color = WidgetThemeHelper.getPrimaryTextColor(themeMode),
+                    color = ColorProvider(family.title),
                     fontWeight = FontWeight.Bold,
                     fontSize = typography.titleSize
                 ),
@@ -229,7 +230,7 @@ private fun ActiveNextUpStrip(
                 Text(
                     text = countdownText,
                     style = TextStyle(
-                        color = WidgetThemeHelper.getAccentColor(themeMode),
+                        color = WidgetThemeHelper.getAccentColor(theme),
                         fontWeight = FontWeight.Medium,
                         fontSize = typography.subtitleSize
                     ),
@@ -241,7 +242,7 @@ private fun ActiveNextUpStrip(
                     Text(
                         text = "• ${CalendarRepository.formatEventTime(nextEvent)}",
                         style = TextStyle(
-                            color = WidgetThemeHelper.getSecondaryTextColor(themeMode),
+                            color = WidgetThemeHelper.getSecondaryTextColor(theme),
                             fontSize = typography.subtitleSize
                         ),
                         maxLines = 1
@@ -255,7 +256,7 @@ private fun ActiveNextUpStrip(
             Text(
                 text = secondaryText,
                 style = TextStyle(
-                    color = WidgetThemeHelper.getSecondaryTextColor(themeMode),
+                    color = WidgetThemeHelper.getSecondaryTextColor(theme),
                     fontSize = typography.badgeSize
                 ),
                 maxLines = 1
@@ -269,14 +270,15 @@ private fun ActiveNextUpStrip(
             modifier = GlanceModifier
                 .size(30.dp)
                 .cornerRadius(15.dp)
-                .background(WidgetThemeHelper.getCardBackgroundColor(themeMode, opacity))
+                .background(WidgetThemeHelper.getCardBackgroundColor(theme, opacity))
                 .clickable(actionRunCallback<RefreshActionCallback>()),
             contentAlignment = Alignment.Center
         ) {
             Image(
                 provider = ImageProvider(R.drawable.ic_refresh),
                 contentDescription = "Refresh",
-                modifier = GlanceModifier.size(16.dp)
+                modifier = GlanceModifier.size(16.dp),
+                colorFilter = ColorFilter.tint(WidgetThemeHelper.getPrimaryTextColor(theme))
             )
         }
     }
@@ -284,7 +286,7 @@ private fun ActiveNextUpStrip(
 
 @androidx.compose.runtime.Composable
 private fun EmptyNextUpStrip(
-    themeMode: String,
+    theme: CalendarTheme,
     opacity: Float,
     typography: WidgetTypography
 ) {
@@ -302,7 +304,8 @@ private fun EmptyNextUpStrip(
         Image(
             provider = ImageProvider(R.drawable.ic_calendar_event),
             contentDescription = "No Events",
-            modifier = GlanceModifier.size(24.dp)
+            modifier = GlanceModifier.size(24.dp),
+            colorFilter = ColorFilter.tint(WidgetThemeHelper.getPrimaryTextColor(theme))
         )
 
         Spacer(modifier = GlanceModifier.width(10.dp))
@@ -311,7 +314,7 @@ private fun EmptyNextUpStrip(
             Text(
                 text = "No upcoming events",
                 style = TextStyle(
-                    color = WidgetThemeHelper.getPrimaryTextColor(themeMode),
+                    color = WidgetThemeHelper.getPrimaryTextColor(theme),
                     fontWeight = FontWeight.Bold,
                     fontSize = typography.titleSize
                 )
@@ -320,7 +323,7 @@ private fun EmptyNextUpStrip(
             Text(
                 text = "Tap to schedule an event",
                 style = TextStyle(
-                    color = WidgetThemeHelper.getSecondaryTextColor(themeMode),
+                    color = WidgetThemeHelper.getSecondaryTextColor(theme),
                     fontSize = typography.subtitleSize
                 )
             )
@@ -332,14 +335,15 @@ private fun EmptyNextUpStrip(
             modifier = GlanceModifier
                 .size(30.dp)
                 .cornerRadius(15.dp)
-                .background(WidgetThemeHelper.getCardBackgroundColor(themeMode, opacity))
+                .background(WidgetThemeHelper.getCardBackgroundColor(theme, opacity))
                 .clickable(actionRunCallback<RefreshActionCallback>()),
             contentAlignment = Alignment.Center
         ) {
             Image(
                 provider = ImageProvider(R.drawable.ic_refresh),
                 contentDescription = "Refresh",
-                modifier = GlanceModifier.size(16.dp)
+                modifier = GlanceModifier.size(16.dp),
+                colorFilter = ColorFilter.tint(WidgetThemeHelper.getPrimaryTextColor(theme))
             )
         }
     }
@@ -348,7 +352,7 @@ private fun EmptyNextUpStrip(
 @androidx.compose.runtime.Composable
 private fun PermissionStrip(
     context: Context,
-    themeMode: String,
+    theme: CalendarTheme,
     typography: WidgetTypography
 ) {
     val launchIntent = Intent(context, MainActivity::class.java).apply {
@@ -364,7 +368,8 @@ private fun PermissionStrip(
         Image(
             provider = ImageProvider(R.drawable.ic_calendar_event),
             contentDescription = "Permission Required",
-            modifier = GlanceModifier.size(24.dp)
+            modifier = GlanceModifier.size(24.dp),
+            colorFilter = ColorFilter.tint(WidgetThemeHelper.getPrimaryTextColor(theme))
         )
 
         Spacer(modifier = GlanceModifier.width(8.dp))
@@ -373,7 +378,7 @@ private fun PermissionStrip(
             Text(
                 text = "Permission Required",
                 style = TextStyle(
-                    color = WidgetThemeHelper.getPrimaryTextColor(themeMode),
+                    color = WidgetThemeHelper.getPrimaryTextColor(theme),
                     fontWeight = FontWeight.Bold,
                     fontSize = typography.titleSize
                 )
@@ -381,7 +386,7 @@ private fun PermissionStrip(
             Text(
                 text = "Tap to grant calendar access",
                 style = TextStyle(
-                    color = WidgetThemeHelper.getSecondaryTextColor(themeMode),
+                    color = WidgetThemeHelper.getSecondaryTextColor(theme),
                     fontSize = typography.subtitleSize
                 )
             )
@@ -392,7 +397,7 @@ private fun PermissionStrip(
 @androidx.compose.runtime.Composable
 private fun ErrorStrip(
     message: String,
-    themeMode: String,
+    theme: CalendarTheme,
     typography: WidgetTypography
 ) {
     Row(
@@ -402,7 +407,7 @@ private fun ErrorStrip(
         Text(
             text = "Error: $message",
             style = TextStyle(
-                color = WidgetThemeHelper.getPrimaryTextColor(themeMode),
+                color = WidgetThemeHelper.getPrimaryTextColor(theme),
                 fontSize = typography.subtitleSize
             ),
             maxLines = 1

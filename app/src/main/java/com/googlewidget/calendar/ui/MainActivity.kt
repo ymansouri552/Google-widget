@@ -371,7 +371,7 @@ fun MainScreen() {
                     )
                 }
 
-                items(calendars, key = { it.id }) { cal ->
+                items(calendars, key = { "${it.id}-${it.accountName}" }) { cal ->
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -422,7 +422,12 @@ fun MainScreen() {
                         )
                     }
                 } else {
-                    items(upcomingEvents, key = { it.id }) { event ->
+                    // Instances._ID (and even EVENT_ID) can repeat for recurring
+                    // events; the begin time makes each instance key unique.
+                    items(
+                        upcomingEvents,
+                        key = { CalendarRepository.eventInstanceKey(it) }
+                    ) { event ->
                         val clickIntent = Intent(Intent.ACTION_VIEW).apply {
                             data = ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI, event.eventId)
                             putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, event.begin)

@@ -22,18 +22,25 @@ A production-ready native Android application built with **Kotlin**, **Jetpack C
 ### 3. Widget Customization Activity (`WidgetConfigActivity`)
 * **Per-Widget Preferences:** Configured independently for each placed widget using `PreferencesGlanceStateDefinition`.
 * **Multi-Select Calendar Filter:** Choose which device calendars to include or exclude.
-* **Theme Modes:** System Dynamic (Day/Night Material 3), Dark, or Light mode.
+* **Theme:** One app-wide choice (Soft pastel, Midnight, Glass, or Auto) colors every widget view — see below.
 * **Background Opacity:** Adjustable slider from 0% (fully transparent) to 100% (solid).
 * **Lookahead Range & Typography:** Choose 7, 14, or 30 days lookahead and Normal vs. Compact font scaling.
 
 ### 3b. Widget Themes (`ThemeActivity`)
 * **Four choices:** Soft pastel, Midnight, Glass, and Auto (Glass in light mode, Midnight in dark mode).
 * **Live previews:** Every card renders the sample events (Teen 5, Teen 4, 301, 103) with that theme's colors, and Glass previews sit on a teal wallpaper so the translucency is visible.
-* **One-tap apply:** The choice is saved app-wide (SharedPreferences) and every placed widget is refreshed immediately; Auto also refreshes on system light/dark changes.
+* **One-tap apply:** The choice is saved app-wide (SharedPreferences) and every placed widget is refreshed immediately; Auto also refreshes on system light/dark changes. The 3-Day Timeline, Weekly, Agenda and Next Up views all use the same theme tokens.
+
+### 3b-2. 7-Day Widget (`WeeklyCalendarGlanceWidget`)
+* **Responsive layouts:** Narrow widgets show a seven-day strip (short weekday, day number, up to four calendar-color dots, `+` for more) above a full-width agenda for the selected day; wide widgets keep the event-chip grid with start times and smaller text.
+* **Day selection:** Tapping a strip day saves the date in per-widget Glance state. Selection falls back to today, or the first visible day, whenever it falls outside the shown week; chevrons and midnight clear it.
+* **Navigation:** Chevrons move seven days, clamp to -30..+90, and auto-reset to today after ten minutes — the same state/reset rules as the Timeline. Week start is configurable as Saturday, Sunday, Monday or rolling Today.
+* **Agenda ordering:** All-day events first, then the ongoing event, upcoming events, and finally ended events (dimmed). One-line 32dp rows show a color bar, fixed-width tabular time and an ellipsized title; the ongoing/next event is tagged `NOW`/`NEXT` and a "Next: … in Xm" pill sits in the agenda header. Row count is derived from `LocalSize` height; a lone leftover event is shown, while two or more get a `+N more` row that opens the day in the calendar app.
+* **Shared event colors:** `WidgetEventColors` resolves the event display color (falling back to the calendar color) once for both the Timeline and the 7-day widget, deriving the light row tint and readable ink. The strip shows at most three dots plus `+N`.
 
 ### 3c. 3-Day Timeline Widget (`ThreeDayTimelineGlanceWidget`)
 * **Minute-accurate timeline:** Every event is one continuous rounded box positioned by its start minute; an event that crosses an hour boundary is never split into per-hour rows.
-* **Auto-fit hours:** The visible range spans the shown days' earliest start to latest end, rounded to whole hours with a 4-hour minimum.
+* **Auto-fit hours:** The visible range spans the shown days' earliest start to latest end, rounded to whole hours with an 8-hour minimum, with optional user-set hour bounds.
 * **Hour grid:** Hour labels on the left, faint dotted hour lines across the columns, and a tinted today column.
 * **Overlap lanes:** Concurrent events split the day column side by side.
 * **Theme tokens:** Every color comes from a `CalendarTheme` object, including event families; "Teen…" titles always use the teen family and other titles get a stable A/B color from a title hash.
@@ -69,7 +76,7 @@ All widget colors live in `app/src/main/java/com/googlewidget/calendar/ui/theme/
 2. Fill in the tokens: `bg`, `text`, `sub`, `grid`, `todayCol`, `todayCircleBg` / `todayCircleText`, `chipBg` / `chipText`, and the `teen`, `a`, `b` event families (each with `fill`, `bar`, `title`, `time`).
 3. Append it to `CalendarThemes.selectable`.
 
-That is the whole change. The widget renderer and the Theme screen both read the token object, so the new theme appears as a preview card and applies live. Widget code must not declare `Color(...)` values of its own: add a token instead. To change how titles map to event families (for example by grade level), edit only `CalendarThemes.familyFor(title)`.
+That is the whole change. All four widget renderers and the Theme screen read the token object, so the new theme appears as a preview card and applies live everywhere. Widget code must not declare `Color(...)` values of its own: add a token instead. To change how titles map to event families (for example by grade level), edit only `CalendarThemes.familyFor(title)`.
 
 ---
 

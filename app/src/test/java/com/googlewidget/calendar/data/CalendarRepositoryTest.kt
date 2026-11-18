@@ -33,6 +33,17 @@ class CalendarRepositoryTest {
     private fun timedMinutesFromNow(startMin: Long, endMin: Long, now: Long): CalendarEvent =
         event(now + startMin * 60_000L, now + endMin * 60_000L)
 
+    @Test
+    fun instanceKey_distinguishesRecurringOccurrencesThatShareAnEventId() {
+        val first = event(1_000_000L, 1_100_000L)
+        val second = event(1_000_000L + 7L * 24 * 60 * 60 * 1000L, 1_100_000L + 7L * 24 * 60 * 60 * 1000L)
+
+        assertEquals(first.id, second.id)
+        assertTrue(
+            CalendarRepository.eventInstanceKey(first) != CalendarRepository.eventInstanceKey(second)
+        )
+    }
+
     private fun allDayEventOn(date: LocalDate): CalendarEvent {
         val begin = date.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
         val end = date.plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()

@@ -51,6 +51,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -74,7 +75,9 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.lifecycleScope
 import com.googlewidget.calendar.data.CalendarAccount
 import com.googlewidget.calendar.data.CalendarRepository
+import com.googlewidget.calendar.data.ThemePreferences
 import com.googlewidget.calendar.data.WidgetConfigKeys
+import com.googlewidget.calendar.ui.theme.CalendarThemes
 import com.googlewidget.calendar.ui.theme.GoogleWidgetTheme
 import com.googlewidget.calendar.widget.AgendaGlanceWidget
 import com.googlewidget.calendar.widget.NextUpGlanceWidget
@@ -127,13 +130,16 @@ class WidgetConfigActivity : ComponentActivity() {
                 ) { innerPadding ->
                     WidgetConfigContent(
                         modifier = Modifier.padding(innerPadding),
-                        onSave = { selectedIds, opacity, themeMode, lookaheadDays, fontScale ->
+                        onSave = { selectedIds, opacity, lookaheadDays, fontScale, chevronStepDays, timelineMinHour, timelineMaxHour, weekStart ->
                             saveConfigurationAndFinish(
                                 selectedIds = selectedIds,
                                 opacity = opacity,
-                                themeMode = themeMode,
                                 lookaheadDays = lookaheadDays,
-                                fontScale = fontScale
+                                fontScale = fontScale,
+                                chevronStepDays = chevronStepDays,
+                                timelineMinHour = timelineMinHour,
+                                timelineMaxHour = timelineMaxHour,
+                                weekStart = weekStart
                             )
                         }
                     )
@@ -145,9 +151,12 @@ class WidgetConfigActivity : ComponentActivity() {
     private fun saveConfigurationAndFinish(
         selectedIds: Set<Long>,
         opacity: Float,
-        themeMode: String,
         lookaheadDays: Int,
-        fontScale: String
+        fontScale: String,
+        chevronStepDays: Int,
+        timelineMinHour: Int?,
+        timelineMaxHour: Int?,
+        weekStart: String
     ) {
         lifecycleScope.launch(Dispatchers.IO) {
             try {
@@ -171,9 +180,26 @@ class WidgetConfigActivity : ComponentActivity() {
                                     selectedIds.map { it.toString() }.toSet()
                                 }
                             this[WidgetConfigKeys.BG_OPACITY] = opacity
-                            this[WidgetConfigKeys.THEME_MODE] = themeMode
                             this[WidgetConfigKeys.LOOKAHEAD_DAYS] = lookaheadDays
                             this[WidgetConfigKeys.FONT_SCALE] = fontScale
+                            this[WidgetConfigKeys.KEY_CHEVRON_STEP_DAYS] =
+                                WidgetConfigKeys.normalizedChevronStep(chevronStepDays)
+                            this[WidgetConfigKeys.KEY_WEEK_START] =
+                                WidgetConfigKeys.normalizedWeekStart(weekStart)
+                            val (minHour, maxHour) = WidgetConfigKeys.normalizeHourBounds(
+                                timelineMinHour,
+                                timelineMaxHour
+                            )
+                            if (minHour == null) {
+                                this.remove(WidgetConfigKeys.KEY_TIMELINE_MIN_HOUR)
+                            } else {
+                                this[WidgetConfigKeys.KEY_TIMELINE_MIN_HOUR] = minHour
+                            }
+                            if (maxHour == null) {
+                                this.remove(WidgetConfigKeys.KEY_TIMELINE_MAX_HOUR)
+                            } else {
+                                this[WidgetConfigKeys.KEY_TIMELINE_MAX_HOUR] = maxHour
+                            }
                         }
                         // Keep a live session composition in sync; otherwise the
                         // widget would ignore the new settings until the session died.
@@ -221,16 +247,23 @@ class WidgetConfigActivity : ComponentActivity() {
 @Composable
 private fun WidgetConfigContent(
     modifier: Modifier = Modifier,
-    onSave: (Set<Long>, Float, String, Int, String) -> Unit
+    onSave: (Set<Long>, Float, Int, String, Int, Int?, Int?, String) -> Unit
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val repository = remember { CalendarRepository(context) }
     var calendars by remember { mutableStateOf<List<CalendarAccount>>(emptyList()) }
     var selectedCalendarIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
     var opacity by remember { mutableFloatStateOf(WidgetConfigKeys.DEFAULT_OPACITY) }
-    var themeMode by remember { mutableStateOf(WidgetConfigKeys.THEME_SYSTEM) }
     var lookaheadDays by remember { mutableIntStateOf(WidgetConfigKeys.DEFAULT_LOOKAHEAD_DAYS) }
     var fontScale by remember { mutableStateOf(WidgetConfigKeys.FONT_SCALE_NORMAL) }
+    var chevronStepDays by remember {
+        mutableIntStateOf(WidgetConfigKeys.DEFAULT_CHEVRON_STEP_DAYS)
+    }
+    var timelineMinHour by remember { mutableStateOf<Int?>(null) }
+    var timelineMaxHour by remember { mutableStateOf<Int?>(null) }
+    var weekStart by remember {
+        mutableStateOf(WidgetConfigKeys.normalizedWeekStart(null))
+    }
 
     var hasPermission by remember {
         mutableStateOf(
@@ -429,7 +462,15 @@ private fun WidgetConfigContent(
                         )
                         Spacer(modifier = Modifier.height(12.dp))
 
-                        // Theme Mode Chips
+                        // One app-wide theme drives all four widget views. The
+                        // old per-widget Dynamic/Dark/Light mode is gone.
+                        val selection by ThemePreferences.selection.collectAsState()
+                        LaunchedEffect(Unit) { ThemePreferences.ensureLoaded(context) }
+                        val themeLabel = if (CalendarThemes.isAuto(selection.themeId)) {
+                            "Auto"
+                        } else {
+                            CalendarThemes.byId(selection.themeId)?.label ?: "Auto"
+                        }
                         Text(
                             text = "Widget Theme",
                             style = MaterialTheme.typography.bodyMedium
@@ -437,21 +478,19 @@ private fun WidgetConfigContent(
                         Spacer(modifier = Modifier.height(6.dp))
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            listOf(
-                                WidgetConfigKeys.THEME_SYSTEM to "Dynamic",
-                                WidgetConfigKeys.THEME_DARK to "Dark",
-                                WidgetConfigKeys.THEME_LIGHT to "Light"
-                            ).forEach { (mode, label) ->
-                                FilterChip(
-                                    selected = themeMode == mode,
-                                    onClick = { themeMode = mode },
-                                    label = { Text(label) },
-                                    leadingIcon = if (themeMode == mode) {
-                                        { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
-                                    } else null
-                                )
+                            Text(
+                                text = "Current: $themeLabel (applies to all widgets)",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Button(
+                                onClick = { context.startActivity(Intent(context, ThemeActivity::class.java)) }
+                            ) {
+                                Text("Choose theme")
                             }
                         }
 
@@ -509,6 +548,149 @@ private fun WidgetConfigContent(
                 }
             }
 
+            // 3-Day Timeline navigation step
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            text = "Timeline Navigation",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "How far the chevron buttons move the 3-Day Timeline.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Chevron step",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            listOf(
+                                WidgetConfigKeys.CHEVRON_STEP_ONE_DAY to "1 day",
+                                WidgetConfigKeys.DEFAULT_CHEVRON_STEP_DAYS to "3 days"
+                            ).forEach { (step, label) ->
+                                FilterChip(
+                                    selected = chevronStepDays == step,
+                                    onClick = { chevronStepDays = step },
+                                    label = { Text(label) },
+                                    leadingIcon = if (chevronStepDays == step) {
+                                        { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                                    } else null
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Optional timeline hour bounds
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            text = "Timeline Hours",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Optionally limit the hours shown on the 3-Day Timeline.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Text("Earliest hour", style = MaterialTheme.typography.bodyMedium)
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            listOf<Int?>(null, 8, 10, 12).forEach { hour ->
+                                FilterChip(
+                                    selected = timelineMinHour == hour,
+                                    onClick = { timelineMinHour = hour },
+                                    label = { Text(if (hour == null) "Any" else "$hour:00") },
+                                    leadingIcon = if (timelineMinHour == hour) {
+                                        { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                                    } else null
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text("Latest hour", style = MaterialTheme.typography.bodyMedium)
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            listOf<Int?>(null, 18, 20, 22).forEach { hour ->
+                                FilterChip(
+                                    selected = timelineMaxHour == hour,
+                                    onClick = { timelineMaxHour = hour },
+                                    label = { Text(if (hour == null) "Any" else "$hour:00") },
+                                    leadingIcon = if (timelineMaxHour == hour) {
+                                        { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                                    } else null
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 7-Day widget week start
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            text = "Week Starts",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "First day of the 7-day widget strip. Today rolls the window.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            listOf(
+                                WidgetConfigKeys.WEEK_START_SATURDAY to "Sat",
+                                WidgetConfigKeys.WEEK_START_SUNDAY to "Sun",
+                                WidgetConfigKeys.WEEK_START_MONDAY to "Mon",
+                                WidgetConfigKeys.WEEK_START_TODAY to "Today"
+                            ).forEach { (mode, label) ->
+                                FilterChip(
+                                    selected = weekStart == mode,
+                                    onClick = { weekStart = mode },
+                                    label = { Text(label) },
+                                    leadingIcon = if (weekStart == mode) {
+                                        { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                                    } else null
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
             // Lookahead Days Card (For Agenda)
             item {
                 Card(
@@ -553,7 +735,16 @@ private fun WidgetConfigContent(
         // Save Button
         Button(
             onClick = {
-                onSave(selectedCalendarIds, opacity, themeMode, lookaheadDays, fontScale)
+                onSave(
+                    selectedCalendarIds,
+                    opacity,
+                    lookaheadDays,
+                    fontScale,
+                    chevronStepDays,
+                    timelineMinHour,
+                    timelineMaxHour,
+                    weekStart
+                )
             },
             modifier = Modifier
                 .fillMaxWidth()

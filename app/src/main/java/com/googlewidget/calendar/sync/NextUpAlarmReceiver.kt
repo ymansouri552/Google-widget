@@ -9,6 +9,7 @@ import com.googlewidget.calendar.widget.AgendaGlanceWidget
 import com.googlewidget.calendar.widget.NextUpGlanceWidget
 import com.googlewidget.calendar.widget.ThreeDayTimelineGlanceWidget
 import com.googlewidget.calendar.widget.WeeklyCalendarGlanceWidget
+import com.googlewidget.calendar.widget.WidgetClock
 import com.googlewidget.calendar.widget.WidgetPlacement
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -19,6 +20,7 @@ class NextUpAlarmReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent?) {
         CalendarRepository.clearCache()
+        WidgetClock.tick()
         if (!WidgetPlacement.hasAnyWidget(context)) return
 
         val pendingResult = goAsync()

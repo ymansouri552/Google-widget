@@ -92,6 +92,11 @@
             android:name=".sync.NextUpAlarmReceiver"
             android:exported="false" />
 
+        <!-- 3-Day Timeline inexact boundary / 15-minute refresh receiver -->
+        <receiver
+            android:name=".sync.TimelineRefreshReceiver"
+            android:exported="false" />
+
         <!-- System & Calendar Changes Receiver -->
         <receiver
             android:name=".sync.CalendarBroadcastReceiver"

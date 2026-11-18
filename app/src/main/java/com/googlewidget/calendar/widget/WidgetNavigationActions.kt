@@ -76,11 +76,7 @@ class WeeklyPrevAction : ActionCallback {
         glanceId: GlanceId,
         parameters: ActionParameters
     ) {
-        updateStateAndRender(context, glanceId, render = { ctx, id ->
-            WeeklyCalendarGlanceWidget().update(ctx, id)
-        }) { prefs ->
-            updateDayOffset(prefs, -7)
-        }
+        WeeklyNavigation.shift(context, glanceId, direction = -1)
     }
 }
 
@@ -90,11 +86,23 @@ class WeeklyNextAction : ActionCallback {
         glanceId: GlanceId,
         parameters: ActionParameters
     ) {
-        updateStateAndRender(context, glanceId, render = { ctx, id ->
-            WeeklyCalendarGlanceWidget().update(ctx, id)
-        }) { prefs ->
-            updateDayOffset(prefs, +7)
-        }
+        WeeklyNavigation.shift(context, glanceId, direction = +1)
+    }
+}
+
+/** A tap on a day in the strip switches the agenda below it. */
+class WeeklySelectDayAction : ActionCallback {
+    companion object {
+        val KEY_DATE = ActionParameters.Key<String>("selected_date")
+    }
+
+    override suspend fun onAction(
+        context: Context,
+        glanceId: GlanceId,
+        parameters: ActionParameters
+    ) {
+        val date = parameters[KEY_DATE] ?: return
+        WeeklyNavigation.selectDay(context, glanceId, date)
     }
 }
 
@@ -104,11 +112,7 @@ class ThreeDayPrevAction : ActionCallback {
         glanceId: GlanceId,
         parameters: ActionParameters
     ) {
-        updateStateAndRender(context, glanceId, render = { ctx, id ->
-            ThreeDayTimelineGlanceWidget().update(ctx, id)
-        }) { prefs ->
-            updateDayOffset(prefs, -3)
-        }
+        ThreeDayNavigation.shift(context, glanceId, direction = -1)
     }
 }
 
@@ -118,11 +122,18 @@ class ThreeDayNextAction : ActionCallback {
         glanceId: GlanceId,
         parameters: ActionParameters
     ) {
-        updateStateAndRender(context, glanceId, render = { ctx, id ->
-            ThreeDayTimelineGlanceWidget().update(ctx, id)
-        }) { prefs ->
-            updateDayOffset(prefs, +3)
-        }
+        ThreeDayNavigation.shift(context, glanceId, direction = +1)
+    }
+}
+
+/** The "Today" pill shown whenever the visible window is not today. */
+class ThreeDayTodayAction : ActionCallback {
+    override suspend fun onAction(
+        context: Context,
+        glanceId: GlanceId,
+        parameters: ActionParameters
+    ) {
+        ThreeDayNavigation.resetToToday(context, glanceId)
     }
 }
 
@@ -138,9 +149,17 @@ class ResetDateOffsetAction : ActionCallback {
             prefs.toMutablePreferences().apply {
                 this[WidgetConfigKeys.KEY_DAY_OFFSET] = 0
                 this.remove(WidgetConfigKeys.KEY_WINDOW_START_HOUR)
+                this.remove(WidgetConfigKeys.KEY_SELECTED_DATE)
             }
         }
+        WeeklyAutoResetWorker.cancel(context, appWidgetIdOf(context, glanceId))
     }
+}
+
+private fun appWidgetIdOf(context: Context, glanceId: GlanceId): Int = try {
+    GlanceAppWidgetManager(context).getAppWidgetId(glanceId)
+} catch (_: Exception) {
+    AppWidgetManager.INVALID_APPWIDGET_ID
 }
 
 class NavigateDateOffsetAction : ActionCallback {

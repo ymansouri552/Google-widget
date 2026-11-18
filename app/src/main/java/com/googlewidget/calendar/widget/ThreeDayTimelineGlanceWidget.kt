@@ -4,7 +4,6 @@ import android.appwidget.AppWidgetManager
 import android.content.ContentUris
 import android.content.Context
 import android.content.Intent
-import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
@@ -19,21 +18,25 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.glance.ColorFilter
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
 import androidx.glance.Image
 import androidx.glance.ImageProvider
 import androidx.glance.LocalContext
 import androidx.glance.LocalSize
+import androidx.glance.action.Action
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetManager
 import androidx.glance.appwidget.SizeMode
+import androidx.glance.appwidget.action.actionRunCallback
 import androidx.glance.appwidget.action.actionStartActivity
 import androidx.glance.appwidget.appWidgetBackground
 import androidx.glance.appwidget.cornerRadius
 import androidx.glance.appwidget.provideContent
 import androidx.glance.appwidget.state.getAppWidgetState
+import androidx.glance.appwidget.state.updateAppWidgetState
 import androidx.glance.background
 import androidx.glance.layout.Alignment
 import androidx.glance.layout.Box
@@ -51,17 +54,17 @@ import androidx.glance.layout.width
 import androidx.glance.state.PreferencesGlanceStateDefinition
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
+import androidx.glance.text.TextAlign
 import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
 import com.googlewidget.calendar.R
 import com.googlewidget.calendar.data.CalendarEvent
 import com.googlewidget.calendar.data.CalendarRepository
 import com.googlewidget.calendar.data.CalendarResult
-import com.googlewidget.calendar.data.ThemePreferences
-import com.googlewidget.calendar.data.ThemeSelection
+import com.googlewidget.calendar.data.WidgetConfigKeys
+import com.googlewidget.calendar.sync.TimelineRefreshScheduler
 import com.googlewidget.calendar.ui.MainActivity
 import com.googlewidget.calendar.ui.theme.CalendarTheme
-import com.googlewidget.calendar.ui.theme.CalendarThemes
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.time.Instant
@@ -154,6 +157,7 @@ class ThreeDayTimelineGlanceWidget : GlanceAppWidget() {
         const val MIN_TEXT_HEIGHT_DP = 24
 
         const val MIN_SPAN_HOURS = 4
+        const val MIN_VISIBLE_HOURS = 8
         const val RANGE_EARLIEST_HOUR = 10
         const val RANGE_LATEST_HOUR = 23
 
@@ -223,15 +227,18 @@ class ThreeDayTimelineGlanceWidget : GlanceAppWidget() {
          * Visible hour cells for the timeline grid, as an inclusive range.
          * The window spans the earliest event start to the latest event end
          * rounded out to whole hours, at least [minSpanHours] cells long.
-         * With no timed events in the shown days it falls back to four hours
-         * around the current time.
+         * With no timed events in the shown days it falls back to eight hours
+         * around the current time. Optional [minHour]/[maxHour] are inclusive
+         * bounds from settings, applied after auto-fitting.
          */
         fun calculateVisibleHours(
             dates: List<LocalDate>,
             timedEvents: List<CalendarEvent>,
             now: LocalDateTime = LocalDateTime.now(),
             zone: ZoneId = ZoneId.systemDefault(),
-            minSpanHours: Int = MIN_SPAN_HOURS
+            minSpanHours: Int = MIN_VISIBLE_HOURS,
+            minHour: Int? = null,
+            maxHour: Int? = null
         ): IntRange {
             var earliest = Int.MAX_VALUE
             var latestExclusive = Int.MIN_VALUE
@@ -256,16 +263,24 @@ class ThreeDayTimelineGlanceWidget : GlanceAppWidget() {
                 }
             }
 
+            val lowerBound = minHour?.coerceIn(0, 22) ?: 0
+            val upperBound = (maxHour?.coerceIn(lowerBound + 1, 23) ?: 23) + 1
+
             if (earliest >= latestExclusive) {
-                val hour = now.atZone(zone).hour.coerceIn(0, 24 - minSpanHours)
-                return hour..(hour + minSpanHours - 1)
+                val hour = now.hour.coerceIn(lowerBound, (upperBound - minSpanHours).coerceAtLeast(lowerBound))
+                return hour..(minOf(hour + minSpanHours - 1, upperBound - 1))
             }
 
-            var start = earliest.coerceIn(0, 23)
-            var endExclusive = latestExclusive.coerceIn(1, 24)
+            var start = earliest.coerceIn(lowerBound, 23)
+            var endExclusive = latestExclusive.coerceIn(1, upperBound)
             if (endExclusive - start < minSpanHours) {
-                endExclusive = (start + minSpanHours).coerceAtMost(24)
-                start = (endExclusive - minSpanHours).coerceAtLeast(0)
+                endExclusive = (start + minSpanHours).coerceAtMost(upperBound)
+                start = (endExclusive - minSpanHours).coerceAtLeast(lowerBound)
+            }
+            start = start.coerceAtLeast(lowerBound)
+            endExclusive = endExclusive.coerceAtMost(upperBound)
+            if (endExclusive - start < 2) {
+                endExclusive = minOf(upperBound, start + 2)
             }
             return start..(endExclusive - 1)
         }
@@ -489,6 +504,72 @@ class ThreeDayTimelineGlanceWidget : GlanceAppWidget() {
             return if (next >= current + spanHours) next else current
         }
 
+        /** Clamps navigation to the supported -30..+90 day window. */
+        fun clampViewOffsetDays(offset: Int): Int =
+            offset.coerceIn(
+                WidgetConfigKeys.MIN_VIEW_OFFSET_DAYS,
+                WidgetConfigKeys.MAX_VIEW_OFFSET_DAYS
+            )
+
+        /** New offset after one chevron tap, clamped to the absolute bounds. */
+        fun chevronOffsetAfter(current: Int, direction: Int, stepDays: Int): Int =
+            clampViewOffsetDays(
+                current + direction * WidgetConfigKeys.normalizedChevronStep(stepDays)
+            )
+
+        /**
+         * Offset to actually render. A chevron interaction expires after ten
+         * minutes so the widget returns to today on its own; a zero offset is
+         * always today and never needs the interaction timestamp.
+         */
+        fun effectiveViewOffsetDays(
+            offset: Int,
+            lastInteractionMillis: Long,
+            nowMillis: Long,
+            resetAfterMillis: Long = WidgetConfigKeys.VIEW_OFFSET_RESET_MILLIS
+        ): Int {
+            val clamped = clampViewOffsetDays(offset)
+            if (clamped == 0) return 0
+            if (lastInteractionMillis <= 0L) return 0
+            return if (nowMillis - lastInteractionMillis > resetAfterMillis) 0 else clamped
+        }
+
+        /** The three dates shown for [today] at [offsetDays]. */
+        fun threeDaysFor(today: LocalDate, offsetDays: Int): List<LocalDate> {
+            val base = today.plusDays(clampViewOffsetDays(offsetDays).toLong())
+            return listOf(base, base.plusDays(1), base.plusDays(2))
+        }
+
+        /** Exact millisecond bounds of the visible three-day window. */
+        fun visibleWindowMillis(
+            dates: List<LocalDate>,
+            zone: ZoneId = ZoneId.systemDefault()
+        ): Pair<Long, Long> {
+            val start = dates.first().atStartOfDay(zone).toInstant().toEpochMilli()
+            val end = dates.last().plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
+            return start to end
+        }
+
+        /**
+         * Localized header range, e.g. "18-20 Nov", "28 Nov - 1 Dec" or
+         * "30 Dec 2026 - 1 Jan 2027".
+         */
+        fun formatRangeLabel(
+            first: LocalDate,
+            last: LocalDate,
+            locale: Locale = Locale.getDefault()
+        ): String {
+            val dayMonth = DateTimeFormatter.ofPattern("d MMM", locale)
+            val month = DateTimeFormatter.ofPattern("MMM", locale)
+            return when {
+                first.year != last.year ->
+                    "${first.format(dayMonth)} ${first.year} - ${last.format(dayMonth)} ${last.year}"
+                first.month == last.month ->
+                    "${first.dayOfMonth}-${last.dayOfMonth} ${last.format(month)}"
+                else -> "${first.format(dayMonth)} - ${last.format(dayMonth)}"
+            }
+        }
+
         fun formatTime(millis: Long, zone: ZoneId = ZoneId.systemDefault()): String {
             return Instant.ofEpochMilli(millis)
                 .atZone(zone)
@@ -512,35 +593,70 @@ class ThreeDayTimelineGlanceWidget : GlanceAppWidget() {
         } catch (_: Exception) {
             AppWidgetManager.INVALID_APPWIDGET_ID
         }
-        val initialPrefs = getAppWidgetState(context, PreferencesGlanceStateDefinition, id)
-        val initialLive = WidgetLiveState.from(initialPrefs)
+        val zone = ZoneId.systemDefault()
+        var prefs = getAppWidgetState(context, PreferencesGlanceStateDefinition, id)
+
+        // Auto-reset is evaluated before rendering so the persisted offset can
+        // never disagree with what the composer shows. Without writing it back,
+        // a subsequent chevron tap would continue from the stale offset.
+        val storedOffset = prefs[WidgetConfigKeys.KEY_VIEW_OFFSET_DAYS] ?: 0
+        val lastInteraction = prefs[WidgetConfigKeys.KEY_LAST_INTERACTION_MILLIS] ?: 0L
+        val effectiveOffset = effectiveViewOffsetDays(
+            storedOffset,
+            lastInteraction,
+            System.currentTimeMillis()
+        )
+        if (effectiveOffset != storedOffset) {
+            prefs = updateAppWidgetState(
+                context,
+                PreferencesGlanceStateDefinition,
+                id
+            ) { current ->
+                current.toMutablePreferences().apply {
+                    this[WidgetConfigKeys.KEY_VIEW_OFFSET_DAYS] = 0
+                    this[WidgetConfigKeys.KEY_LAST_INTERACTION_MILLIS] = 0L
+                }
+            }
+        }
+
+        val initialLive = WidgetLiveState.from(prefs)
         WidgetLiveStateHub.publish(appWidgetId, initialLive)
-        ThemePreferences.ensureLoaded(context)
 
         val appContext = context.applicationContext
-        val today = LocalDate.now()
-        val initialBase = today.plusDays(initialLive.dayOffset.toLong())
-        val initialThreeDays = listOf(initialBase, initialBase.plusDays(1), initialBase.plusDays(2))
+        val today = LocalDate.now(zone)
+        val initialThreeDays = threeDaysFor(today, initialLive.viewOffsetDays)
+        val (initialStart, initialEnd) = visibleWindowMillis(initialThreeDays, zone)
         val initialResult = withContext(Dispatchers.IO) {
-            CalendarRepository(appContext).getUpcomingEvents(
-                initialThreeDays.first().minusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli(),
-                initialThreeDays.last().plusDays(2).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli(),
+            CalendarRepository(appContext).getEventsInWindow(
+                initialStart,
+                initialEnd,
                 initialLive.selectedCalendarIds
             )
         }
+
+        // Keep the "in Nm" pill and the date header from going stale between
+        // launcher ticks: next event start/end, midnight, or 15 minutes.
+        withContext(Dispatchers.IO) { TimelineRefreshScheduler.schedule(appContext) }
 
         provideContent {
             // Config changes (calendar selection) publish here and recompose the
             // running session in-process.
             val live by WidgetLiveStateHub.flow(appWidgetId).collectAsState(initial = initialLive)
+            // A scheduled refresh bumps this revision so a still-alive Glance
+            // session recomposes and recomputes time-dependent text.
+            val clockRevision by WidgetClock.revision.collectAsState()
             // App-wide theme: observing it repaints live sessions immediately when
             // the switcher saves, without waiting for update() to restart Glance.
-            val selection by ThemePreferences.selection.collectAsState(
-                initial = ThemeSelection(ThemePreferences.getSelectedId(appContext))
+            val theme = WidgetThemeHelper.currentCalendarTheme(context)
+            val nowDate = LocalDate.now(zone)
+            val nowMillis = System.currentTimeMillis()
+            val offset = effectiveViewOffsetDays(
+                live.viewOffsetDays,
+                live.lastInteractionMillis,
+                nowMillis
             )
-            val now = LocalDate.now()
-            val baseDate = now.plusDays(live.dayOffset.toLong())
-            val threeDays = listOf(baseDate, baseDate.plusDays(1), baseDate.plusDays(2))
+            val threeDays = threeDaysFor(nowDate, offset)
+            val (windowStart, windowEnd) = visibleWindowMillis(threeDays, zone)
 
             val calendarResult by produceState(
                 initialValue = initialResult,
@@ -548,24 +664,24 @@ class ThreeDayTimelineGlanceWidget : GlanceAppWidget() {
                 key2 = live.selectedCalendarIds
             ) {
                 value = withContext(Dispatchers.IO) {
-                    CalendarRepository(appContext).getUpcomingEvents(
-                        threeDays.first().minusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli(),
-                        threeDays.last().plusDays(2).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli(),
+                    CalendarRepository(appContext).getEventsInWindow(
+                        windowStart,
+                        windowEnd,
                         live.selectedCalendarIds
                     )
                 }
             }
 
-            val systemDark =
-                (context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
-                    Configuration.UI_MODE_NIGHT_YES
-            val theme = CalendarThemes.resolve(selection.themeId, systemDark)
-
             ThreeDayTimelineRoot(
                 context = context,
                 result = calendarResult,
-                today = now,
+                today = nowDate,
                 threeDays = threeDays,
+                viewOffsetDays = offset,
+                chevronStepDays = live.chevronStepDays,
+                timelineMinHour = live.timelineMinHour,
+                timelineMaxHour = live.timelineMaxHour,
+                nowMillis = nowMillis,
                 theme = theme
             )
         }
@@ -575,7 +691,7 @@ class ThreeDayTimelineGlanceWidget : GlanceAppWidget() {
 private const val SURFACE_CORNER_DP = 24
 private const val SURFACE_PADDING_DP = 12
 private const val HOUR_GUTTER_DP = 26
-private const val HEADER_RESERVED_DP = 104f
+private const val HEADER_RESERVED_DP = 128f
 private const val FALLBACK_WIDGET_HEIGHT_DP = 320f
 private const val FALLBACK_WIDGET_WIDTH_DP = 320f
 private const val EVENT_CORNER_DP = 10
@@ -592,6 +708,11 @@ private fun ThreeDayTimelineRoot(
     result: CalendarResult<List<CalendarEvent>>,
     today: LocalDate,
     threeDays: List<LocalDate>,
+    viewOffsetDays: Int,
+    chevronStepDays: Int,
+    timelineMinHour: Int?,
+    timelineMaxHour: Int?,
+    nowMillis: Long,
     theme: CalendarTheme
 ) {
     Box(
@@ -621,6 +742,11 @@ private fun ThreeDayTimelineRoot(
                 today = today,
                 threeDays = threeDays,
                 events = result.data,
+                viewOffsetDays = viewOffsetDays,
+                chevronStepDays = chevronStepDays,
+                timelineMinHour = timelineMinHour,
+                timelineMaxHour = timelineMaxHour,
+                nowMillis = nowMillis,
                 theme = theme
             )
         }
@@ -633,20 +759,44 @@ private fun ThreeDayContent(
     today: LocalDate,
     threeDays: List<LocalDate>,
     events: List<CalendarEvent>,
+    viewOffsetDays: Int,
+    chevronStepDays: Int,
+    timelineMinHour: Int?,
+    timelineMaxHour: Int?,
+    nowMillis: Long,
     theme: CalendarTheme
 ) {
     val zone = ZoneId.systemDefault()
     val timedEvents = events.filter { !it.allDay }
-    val nowMillis = System.currentTimeMillis()
-    val hours = ThreeDayTimelineGlanceWidget.calculateVisibleHours(threeDays, timedEvents, zone = zone)
+    val hours = ThreeDayTimelineGlanceWidget.calculateVisibleHours(
+        dates = threeDays,
+        timedEvents = timedEvents,
+        now = LocalDateTime.ofInstant(Instant.ofEpochMilli(nowMillis), zone),
+        zone = zone,
+        minHour = timelineMinHour,
+        maxHour = timelineMaxHour
+    )
+    // Independent of the offset: the pill is only shown at offset 0, and the
+    // next event is always the next real upcoming one from the visible query.
     val nextEvent = timedEvents
-        .filter { it.begin > nowMillis && CalendarRepository.getEventLocalDate(it) in threeDays }
+        .filter { it.begin > nowMillis }
         .minByOrNull { it.begin }
+    val headerTitle = if (viewOffsetDays == 0) {
+        today.format(DateTimeFormatter.ofPattern("EEE d MMM", Locale.getDefault()))
+    } else {
+        ThreeDayTimelineGlanceWidget.formatRangeLabel(
+            threeDays.first(),
+            threeDays.last(),
+            Locale.getDefault()
+        )
+    }
 
     Column(modifier = GlanceModifier.fillMaxSize()) {
         TimelineHeader(
             context = context,
-            today = today,
+            title = headerTitle,
+            viewOffsetDays = viewOffsetDays,
+            chevronStepDays = chevronStepDays,
             nextEvent = nextEvent,
             nowMillis = nowMillis,
             theme = theme
@@ -676,7 +826,9 @@ private fun ThreeDayContent(
 @Composable
 private fun TimelineHeader(
     context: Context,
-    today: LocalDate,
+    title: String,
+    viewOffsetDays: Int,
+    chevronStepDays: Int,
     nextEvent: CalendarEvent?,
     nowMillis: Long,
     theme: CalendarTheme
@@ -684,35 +836,75 @@ private fun TimelineHeader(
     val openAppIntent = Intent(context, MainActivity::class.java).apply {
         flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
     }
+    val stepLabel = if (chevronStepDays == 1) "1 day" else "$chevronStepDays days"
 
     Row(
         modifier = GlanceModifier
             .fillMaxWidth()
-            .height(24.dp)
-            .clickable(actionStartActivity(openAppIntent)),
+            .height(48.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
-            text = today.format(DateTimeFormatter.ofPattern("EEE d MMM", Locale.getDefault())),
-            style = TextStyle(
-                color = ColorProvider(theme.text),
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Medium
-            ),
-            maxLines = 1
+        HeaderChevron(
+            iconRes = R.drawable.ic_chevron_left,
+            contentDescription = "Previous $stepLabel",
+            action = actionRunCallback<ThreeDayPrevAction>(),
+            theme = theme
         )
 
-        Spacer(modifier = GlanceModifier.defaultWeight())
+        Box(
+            modifier = GlanceModifier
+                .defaultWeight()
+                .fillMaxHeight()
+                .clickable(actionStartActivity(openAppIntent)),
+            contentAlignment = Alignment.CenterStart
+        ) {
+            Text(
+                text = title,
+                style = TextStyle(
+                    color = ColorProvider(theme.text),
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Medium
+                ),
+                maxLines = 1
+            )
+        }
 
-        if (nextEvent != null) {
+        HeaderChevron(
+            iconRes = R.drawable.ic_chevron_right,
+            contentDescription = "Next $stepLabel",
+            action = actionRunCallback<ThreeDayNextAction>(),
+            theme = theme
+        )
+
+        if (viewOffsetDays == 0) {
+            if (nextEvent != null) {
+                Box(
+                    modifier = GlanceModifier
+                        .cornerRadius(12.dp)
+                        .background(theme.chipBg)
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        text = "Next: ${nextEvent.title} ${countdownText(nextEvent.begin, nowMillis)}",
+                        style = TextStyle(
+                            color = ColorProvider(theme.chipText),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium
+                        ),
+                        maxLines = 1
+                    )
+                }
+            }
+        } else {
             Box(
                 modifier = GlanceModifier
                     .cornerRadius(12.dp)
                     .background(theme.chipBg)
                     .padding(horizontal = 8.dp, vertical = 4.dp)
+                    .clickable(actionRunCallback<ThreeDayTodayAction>())
             ) {
                 Text(
-                    text = "Next: ${nextEvent.title} ${countdownText(nextEvent.begin, nowMillis)}",
+                    text = "Today",
                     style = TextStyle(
                         color = ColorProvider(theme.chipText),
                         fontSize = 12.sp,
@@ -722,6 +914,29 @@ private fun TimelineHeader(
                 )
             }
         }
+    }
+}
+
+/** 48dp touch target with a theme-tinted vector chevron. */
+@Composable
+private fun HeaderChevron(
+    iconRes: Int,
+    contentDescription: String,
+    action: Action,
+    theme: CalendarTheme
+) {
+    Box(
+        modifier = GlanceModifier
+            .size(48.dp)
+            .clickable(action),
+        contentAlignment = Alignment.Center
+    ) {
+        Image(
+            provider = ImageProvider(iconRes),
+            contentDescription = contentDescription,
+            modifier = GlanceModifier.size(20.dp),
+            colorFilter = ColorFilter.tint(ColorProvider(theme.text))
+        )
     }
 }
 
@@ -796,6 +1011,7 @@ private fun TimelineGrid(
     theme: CalendarTheme
 ) {
     val zone = ZoneId.systemDefault()
+    val context = LocalContext.current
     val reportedHeightDp = LocalSize.current.height.value
     val gridHeightDp = (
         (if (reportedHeightDp > 0f) reportedHeightDp else FALLBACK_WIDGET_HEIGHT_DP) -
@@ -849,7 +1065,59 @@ private fun TimelineGrid(
             }
         }
 
-        // Layer 2: hour labels and faint dotted hour lines. Glance containers
+        // Layer 2: clickable targets for empty hour cells. They sit below the
+        // event layer, so an event's own ACTION_VIEW always wins a tap.
+        Row(modifier = GlanceModifier.fillMaxSize()) {
+            Spacer(modifier = GlanceModifier.width(HOUR_GUTTER_DP.dp))
+            threeDays.forEach { date ->
+                ChunkedColumn(
+                    items = hours.toList(),
+                    modifier = GlanceModifier.defaultWeight().fillMaxHeight()
+                ) { hour ->
+                    val cellBegin = date.atTime(hour, 0).atZone(zone).toInstant().toEpochMilli()
+                    val cellEnd = cellBegin + 60 * 60 * 1000L
+                    val cellHasEvent = timedEvents.any { it.begin < cellEnd && it.end > cellBegin }
+                    val cellModifier = GlanceModifier
+                        .fillMaxWidth()
+                        .height(hourHeightDp.dp)
+                        .let {
+                            if (cellHasEvent) it else it.clickable(newEventAction(context, date, hour))
+                        }
+                    Box(modifier = cellModifier) {}
+                }
+            }
+        }
+
+        // Layer 3: the "now" line, only across today's column and only when
+        // the current time falls inside the visible grid.
+        Row(modifier = GlanceModifier.fillMaxSize()) {
+            Spacer(modifier = GlanceModifier.width(HOUR_GUTTER_DP.dp))
+            threeDays.forEach { date ->
+                Box(
+                    modifier = GlanceModifier.defaultWeight().fillMaxHeight(),
+                    contentAlignment = Alignment.TopStart
+                ) {
+                    if (date == today) {
+                        val (gridStart, gridEnd) =
+                            ThreeDayTimelineGlanceWidget.gridBoundsForDay(
+                                date, hours.first, hours.last, zone
+                            )
+                        if (nowMillis in gridStart until gridEnd) {
+                            val topDp = ((nowMillis - gridStart) / 60000f * dpPerMinute).dp
+                            Box(
+                                modifier = GlanceModifier
+                                    .fillMaxWidth()
+                                    .padding(top = topDp)
+                                    .height(2.dp)
+                                    .background(theme.todayCircleBg)
+                            ) {}
+                        }
+                    }
+                }
+            }
+        }
+
+        // Layer 4: hour labels and faint dotted hour lines. Glance containers
         // accept at most 10 children, so a long window is split across several
         // columns that keep the same row heights.
         ChunkedColumn(
@@ -894,7 +1162,7 @@ private fun TimelineGrid(
             }
         }
 
-        // Layer 3: one continuous minute-positioned box per event.
+        // Layer 5: one continuous minute-positioned box per event.
         Row(modifier = GlanceModifier.fillMaxSize()) {
             Spacer(modifier = GlanceModifier.width(HOUR_GUTTER_DP.dp))
             threeDays.forEach { date ->
@@ -1104,9 +1372,10 @@ private fun TimelineEventCard(
     modifier: GlanceModifier
 ) {
     val family = theme.eventColors(box.event.title)
+    val palette = WidgetEventColors.palette(box.event, theme)
     val alpha = if (dimmed) 0.5f else 1f
-    val fill = family.fill.copy(alpha = family.fill.alpha * alpha)
-    val bar = family.bar.copy(alpha = family.bar.alpha * alpha)
+    val fill = palette.tint.copy(alpha = palette.tint.alpha * alpha)
+    val bar = palette.full.copy(alpha = palette.full.alpha * alpha)
     val titleColor = family.title.copy(alpha = family.title.alpha * alpha)
     val timeColor = family.time.copy(alpha = family.time.alpha * alpha)
 
@@ -1155,17 +1424,24 @@ private fun TimelineEventCard(
                     style = TextStyle(
                         color = ColorProvider(titleColor),
                         fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium
+                        fontWeight = FontWeight.Medium,
+                        textAlign = if (isRightToLeftTitle(box.event.title)) {
+                            TextAlign.Right
+                        } else {
+                            TextAlign.Left
+                        }
                     ),
                     maxLines = 1
                 )
                 if (showTime) {
+                    // LRM keeps the clock string LTR under an RTL locale.
                     Text(
-                        text = ThreeDayTimelineGlanceWidget.formatTimeRange(box.event.begin, box.event.end),
+                        text = "\u200E${ThreeDayTimelineGlanceWidget.formatTimeRange(box.event.begin, box.event.end)}",
                         style = TextStyle(
                             color = ColorProvider(timeColor),
                             fontSize = 11.sp,
-                            fontWeight = FontWeight.Normal
+                            fontWeight = FontWeight.Normal,
+                            textAlign = TextAlign.Left
                         ),
                         maxLines = 1
                     )
@@ -1183,6 +1459,41 @@ private fun countdownText(startMillis: Long, nowMillis: Long): String {
         hours > 0 && mins > 0 -> "in ${hours}h ${mins}m"
         hours > 0 -> "in ${hours}h"
         else -> "in ${mins}m"
+    }
+}
+
+/**
+ * ACTION_INSERT needs no WRITE_CALENDAR permission: the calendar app owns the
+ * editor. If no app can handle it, fall back to the companion app instead of
+ * handing Glance an unresolvable PendingIntent.
+ */
+private fun newEventAction(context: Context, date: LocalDate, hour: Int): Action {
+    val begin = date.atTime(hour, 0)
+        .atZone(ZoneId.systemDefault())
+        .toInstant()
+        .toEpochMilli()
+    val insertIntent = Intent(Intent.ACTION_INSERT).apply {
+        data = CalendarContract.Events.CONTENT_URI
+        putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, begin)
+        putExtra(CalendarContract.EXTRA_EVENT_END_TIME, begin + 60 * 60 * 1000L)
+        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+    }
+    val target = if (insertIntent.resolveActivity(context.packageManager) != null) {
+        insertIntent
+    } else {
+        Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+    }
+    return actionStartActivity(target)
+}
+
+/** Persian/Arabic script should align right even when the device locale is LTR. */
+internal fun isRightToLeftTitle(title: String): Boolean = title.any { char ->
+    when (Character.getDirectionality(char)) {
+        Character.DIRECTIONALITY_RIGHT_TO_LEFT,
+        Character.DIRECTIONALITY_RIGHT_TO_LEFT_ARABIC -> true
+        else -> false
     }
 }
 

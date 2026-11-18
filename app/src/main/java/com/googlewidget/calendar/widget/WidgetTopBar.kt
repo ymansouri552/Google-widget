@@ -5,7 +5,6 @@ import android.content.Context
 import android.content.Intent
 import android.provider.CalendarContract
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.glance.ColorFilter
@@ -36,6 +35,7 @@ import androidx.glance.unit.ColorProvider
 import com.googlewidget.calendar.R
 import com.googlewidget.calendar.data.WidgetConfigKeys
 import com.googlewidget.calendar.ui.WidgetConfigActivity
+import com.googlewidget.calendar.ui.theme.CalendarTheme
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -59,142 +59,124 @@ fun WidgetTopBar(
     todayDayOfMonth: Int,
     onPrevClick: Action,
     onNextClick: Action,
-    themeMode: String,
+    theme: CalendarTheme,
     modifier: GlanceModifier = GlanceModifier
 ) {
-    // Concrete icon tint adapted to the active theme mode and system night state.
-    val isDark = WidgetThemeHelper.isDarkTheme(context, themeMode)
-    val iconColor = if (isDark) Color(0xFFE8EAED) else Color(0xFF202124)
-    val barBackgroundColor = WidgetThemeHelper.getCardBackgroundColor(context, themeMode, 1f)
+    val iconColor = theme.text
+    val barBackgroundColor = WidgetThemeHelper.getCardBackgroundColor(theme, 1f)
 
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .height(40.dp)
-            .padding(horizontal = 4.dp, vertical = 2.dp),
+            .height(48.dp)
+            .padding(horizontal = 2.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Left: Calendar/Today icon button displaying current day number
+        // Every visible button sits inside a 48dp touch target.
         Box(
-            modifier = GlanceModifier
-                .size(32.dp)
-                .cornerRadius(6.dp)
-                .background(barBackgroundColor)
-                .clickable(actionRunCallback<ResetDateOffsetAction>()),
+            modifier = GlanceModifier.size(48.dp).clickable(actionRunCallback<ResetDateOffsetAction>()),
             contentAlignment = Alignment.Center
         ) {
-            Column(
-                modifier = GlanceModifier.fillMaxSize(),
-                horizontalAlignment = Alignment.CenterHorizontally
+            Box(
+                modifier = GlanceModifier.size(36.dp).cornerRadius(6.dp).background(barBackgroundColor),
+                contentAlignment = Alignment.Center
             ) {
-                // Red calendar roof strip
-                Spacer(
-                    modifier = GlanceModifier
-                        .fillMaxWidth()
-                        .height(6.dp)
-                        .background(Color(0xFFEA4335))
-                )
-                // Day number inside calendar box
-                Box(
+                Column(
                     modifier = GlanceModifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text(
-                        text = todayDayOfMonth.toString(),
-                        style = TextStyle(
-                            color = ColorProvider(iconColor),
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 11.sp
-                        )
+                    Spacer(
+                        modifier = GlanceModifier
+                            .fillMaxWidth()
+                            .height(5.dp)
+                            .background(WidgetThemeHelper.getAccentColor(theme))
                     )
+                    Box(modifier = GlanceModifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text(
+                            text = todayDayOfMonth.toString(),
+                            style = TextStyle(
+                                color = ColorProvider(iconColor),
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.sp
+                            )
+                        )
+                    }
                 }
             }
         }
 
-        // Center: < Month >
         Row(
             modifier = GlanceModifier.defaultWeight(),
             verticalAlignment = Alignment.CenterVertically,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // < button (enlarged touch target with visible card background for reliable thumb taps)
             Box(
-                modifier = GlanceModifier
-                    .size(width = 42.dp, height = 36.dp)
-                    .cornerRadius(8.dp)
-                    .background(barBackgroundColor)
-                    .clickable(onPrevClick),
+                modifier = GlanceModifier.size(48.dp).clickable(onPrevClick),
                 contentAlignment = Alignment.Center
             ) {
-                Image(
-                    provider = ImageProvider(R.drawable.ic_chevron_left),
-                    contentDescription = "Previous",
-                    modifier = GlanceModifier.size(20.dp),
-                    colorFilter = ColorFilter.tint(ColorProvider(iconColor))
-                )
+                Box(
+                    modifier = GlanceModifier.size(32.dp).cornerRadius(8.dp).background(barBackgroundColor),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Image(
+                        provider = ImageProvider(R.drawable.ic_chevron_left),
+                        contentDescription = "Previous",
+                        modifier = GlanceModifier.size(18.dp),
+                        colorFilter = ColorFilter.tint(ColorProvider(iconColor))
+                    )
+                }
             }
 
-            Spacer(modifier = GlanceModifier.width(6.dp))
-
-            // Month title
             Text(
                 text = monthTitle,
                 style = TextStyle(
-                    color = WidgetThemeHelper.getPrimaryTextColor(themeMode),
+                    color = WidgetThemeHelper.getPrimaryTextColor(theme),
                     fontWeight = FontWeight.Bold,
                     fontSize = 14.sp
                 ),
                 maxLines = 1
             )
 
-            Spacer(modifier = GlanceModifier.width(6.dp))
-
-            // > button (enlarged touch target with visible card background for reliable thumb taps)
             Box(
-                modifier = GlanceModifier
-                    .size(width = 42.dp, height = 36.dp)
-                    .cornerRadius(8.dp)
-                    .background(barBackgroundColor)
-                    .clickable(onNextClick),
+                modifier = GlanceModifier.size(48.dp).clickable(onNextClick),
                 contentAlignment = Alignment.Center
             ) {
-                Image(
-                    provider = ImageProvider(R.drawable.ic_chevron_right),
-                    contentDescription = "Next",
-                    modifier = GlanceModifier.size(20.dp),
-                    colorFilter = ColorFilter.tint(ColorProvider(iconColor))
-                )
+                Box(
+                    modifier = GlanceModifier.size(32.dp).cornerRadius(8.dp).background(barBackgroundColor),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Image(
+                        provider = ImageProvider(R.drawable.ic_chevron_right),
+                        contentDescription = "Next",
+                        modifier = GlanceModifier.size(18.dp),
+                        colorFilter = ColorFilter.tint(ColorProvider(iconColor))
+                    )
+                }
             }
         }
 
-        // Right: + and ⋮ (settings)
-        Row(
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // + button
+        Row(verticalAlignment = Alignment.CenterVertically) {
             val addEventIntent = Intent(Intent.ACTION_INSERT).apply {
                 data = CalendarContract.Events.CONTENT_URI
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK
             }
             Box(
-                modifier = GlanceModifier
-                    .size(28.dp)
-                    .cornerRadius(14.dp)
-                    .background(barBackgroundColor)
-                    .clickable(actionStartActivity(addEventIntent)),
+                modifier = GlanceModifier.size(48.dp).clickable(actionStartActivity(addEventIntent)),
                 contentAlignment = Alignment.Center
             ) {
-                Image(
-                    provider = ImageProvider(R.drawable.ic_add),
-                    contentDescription = "Add Event",
-                    modifier = GlanceModifier.size(16.dp),
-                    colorFilter = ColorFilter.tint(ColorProvider(iconColor))
-                )
+                Box(
+                    modifier = GlanceModifier.size(36.dp).cornerRadius(18.dp).background(barBackgroundColor),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Image(
+                        provider = ImageProvider(R.drawable.ic_add),
+                        contentDescription = "Add Event",
+                        modifier = GlanceModifier.size(16.dp),
+                        colorFilter = ColorFilter.tint(ColorProvider(iconColor))
+                    )
+                }
             }
 
-            Spacer(modifier = GlanceModifier.width(6.dp))
-
-            // ⋮ button
             val configIntent = Intent(context, WidgetConfigActivity::class.java).apply {
                 if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
                     putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
@@ -202,19 +184,20 @@ fun WidgetTopBar(
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             }
             Box(
-                modifier = GlanceModifier
-                    .size(28.dp)
-                    .cornerRadius(14.dp)
-                    .background(barBackgroundColor)
-                    .clickable(actionStartActivity(configIntent)),
+                modifier = GlanceModifier.size(48.dp).clickable(actionStartActivity(configIntent)),
                 contentAlignment = Alignment.Center
             ) {
-                Image(
-                    provider = ImageProvider(R.drawable.ic_more_vert),
-                    contentDescription = "Settings",
-                    modifier = GlanceModifier.size(16.dp),
-                    colorFilter = ColorFilter.tint(ColorProvider(iconColor))
-                )
+                Box(
+                    modifier = GlanceModifier.size(36.dp).cornerRadius(18.dp).background(barBackgroundColor),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Image(
+                        provider = ImageProvider(R.drawable.ic_more_vert),
+                        contentDescription = "Settings",
+                        modifier = GlanceModifier.size(16.dp),
+                        colorFilter = ColorFilter.tint(ColorProvider(iconColor))
+                    )
+                }
             }
         }
     }

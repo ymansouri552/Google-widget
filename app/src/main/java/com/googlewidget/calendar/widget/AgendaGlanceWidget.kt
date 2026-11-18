@@ -4,7 +4,7 @@ import android.content.ContentUris
 import android.content.Context
 import android.content.Intent
 import android.provider.CalendarContract
-import androidx.compose.ui.graphics.Color
+import androidx.glance.ColorFilter
 import androidx.compose.ui.unit.dp
 import androidx.datastore.preferences.core.Preferences
 import androidx.glance.GlanceId
@@ -45,6 +45,7 @@ import com.googlewidget.calendar.data.CalendarRepository
 import com.googlewidget.calendar.data.CalendarResult
 import com.googlewidget.calendar.data.WidgetConfigKeys
 import com.googlewidget.calendar.ui.MainActivity
+import com.googlewidget.calendar.ui.theme.CalendarTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
@@ -62,7 +63,6 @@ class AgendaGlanceWidget : GlanceAppWidget() {
             ?.mapNotNull { it.toLongOrNull() }
             ?.toSet() ?: emptySet()
         val opacity = prefs[WidgetConfigKeys.BG_OPACITY] ?: WidgetConfigKeys.DEFAULT_OPACITY
-        val themeMode = prefs[WidgetConfigKeys.THEME_MODE] ?: WidgetConfigKeys.THEME_SYSTEM
         val lookaheadDays = prefs[WidgetConfigKeys.LOOKAHEAD_DAYS] ?: WidgetConfigKeys.DEFAULT_LOOKAHEAD_DAYS
         val fontScale = prefs[WidgetConfigKeys.FONT_SCALE] ?: WidgetConfigKeys.FONT_SCALE_NORMAL
 
@@ -80,7 +80,7 @@ class AgendaGlanceWidget : GlanceAppWidget() {
                 context = context,
                 result = calendarResult,
                 opacity = opacity,
-                themeMode = themeMode,
+                theme = WidgetThemeHelper.currentCalendarTheme(context),
                 fontScale = fontScale,
                 lookaheadDays = lookaheadDays,
                 noCalendarsSelected = selectedCalendarIds == setOf(WidgetConfigKeys.NO_CALENDAR_PLACEHOLDER.toLong())
@@ -94,13 +94,13 @@ private fun AgendaWidgetRoot(
     context: Context,
     result: CalendarResult<List<CalendarEvent>>,
     opacity: Float,
-    themeMode: String,
+    theme: CalendarTheme,
     fontScale: String,
     lookaheadDays: Int,
     noCalendarsSelected: Boolean
 ) {
     val typography = WidgetThemeHelper.getTypography(fontScale)
-    val backgroundColor = WidgetThemeHelper.getSurfaceColor(context, themeMode, opacity)
+    val backgroundColor = WidgetThemeHelper.getSurfaceColor(theme, opacity)
 
     Box(
         modifier = GlanceModifier
@@ -112,16 +112,16 @@ private fun AgendaWidgetRoot(
     ) {
         when (result) {
             is CalendarResult.PermissionRequired -> {
-                PermissionRequiredView(context, themeMode, typography)
+                PermissionRequiredView(context, theme, typography)
             }
             is CalendarResult.Error -> {
-                ErrorView(result.throwable.localizedMessage ?: "Failed to load events", themeMode, typography)
+                ErrorView(result.throwable.localizedMessage ?: "Failed to load events", theme, typography)
             }
             is CalendarResult.Success -> {
                 AgendaContent(
                     context = context,
                     events = result.data,
-                    themeMode = themeMode,
+                    theme = theme,
                     opacity = opacity,
                     typography = typography,
                     lookaheadDays = lookaheadDays,
@@ -136,7 +136,7 @@ private fun AgendaWidgetRoot(
 private fun AgendaContent(
     context: Context,
     events: List<CalendarEvent>,
-    themeMode: String,
+    theme: CalendarTheme,
     opacity: Float,
     typography: WidgetTypography,
     lookaheadDays: Int,
@@ -157,13 +157,14 @@ private fun AgendaContent(
             Image(
                 provider = ImageProvider(R.drawable.ic_calendar_event),
                 contentDescription = "Calendar",
-                modifier = GlanceModifier.size(20.dp)
+                modifier = GlanceModifier.size(20.dp),
+                colorFilter = ColorFilter.tint(WidgetThemeHelper.getPrimaryTextColor(theme))
             )
             Spacer(modifier = GlanceModifier.width(8.dp))
             Text(
                 text = headerDateStr,
                 style = TextStyle(
-                    color = WidgetThemeHelper.getPrimaryTextColor(themeMode),
+                    color = WidgetThemeHelper.getPrimaryTextColor(theme),
                     fontWeight = FontWeight.Bold,
                     fontSize = typography.widgetHeaderSize
                 ),
@@ -180,14 +181,15 @@ private fun AgendaContent(
                 modifier = GlanceModifier
                     .size(30.dp)
                     .cornerRadius(15.dp)
-                    .background(WidgetThemeHelper.getCardBackgroundColor(themeMode, opacity))
+                    .background(WidgetThemeHelper.getCardBackgroundColor(theme, opacity))
                     .clickable(actionStartActivity(addEventIntent)),
                 contentAlignment = Alignment.Center
             ) {
                 Image(
                     provider = ImageProvider(R.drawable.ic_calendar_add),
                     contentDescription = "New Event",
-                    modifier = GlanceModifier.size(16.dp)
+                    modifier = GlanceModifier.size(16.dp),
+                    colorFilter = ColorFilter.tint(WidgetThemeHelper.getPrimaryTextColor(theme))
                 )
             }
 
@@ -198,14 +200,15 @@ private fun AgendaContent(
                 modifier = GlanceModifier
                     .size(30.dp)
                     .cornerRadius(15.dp)
-                    .background(WidgetThemeHelper.getCardBackgroundColor(themeMode, opacity))
+                    .background(WidgetThemeHelper.getCardBackgroundColor(theme, opacity))
                     .clickable(actionRunCallback<RefreshActionCallback>()),
                 contentAlignment = Alignment.Center
             ) {
                 Image(
                     provider = ImageProvider(R.drawable.ic_refresh),
                     contentDescription = "Refresh",
-                    modifier = GlanceModifier.size(16.dp)
+                    modifier = GlanceModifier.size(16.dp),
+                    colorFilter = ColorFilter.tint(WidgetThemeHelper.getPrimaryTextColor(theme))
                 )
             }
         }
@@ -222,7 +225,7 @@ private fun AgendaContent(
                     Text(
                         text = if (noCalendarsSelected) "No calendars selected" else "No events in next $lookaheadDays days",
                         style = TextStyle(
-                            color = WidgetThemeHelper.getSecondaryTextColor(themeMode),
+                            color = WidgetThemeHelper.getSecondaryTextColor(theme),
                             fontSize = typography.subtitleSize
                         )
                     )
@@ -235,12 +238,12 @@ private fun AgendaContent(
             LazyColumn(modifier = GlanceModifier.fillMaxSize()) {
                 groupedEvents.forEach { (date, dayEvents) ->
                     item {
-                        DayHeaderItem(date = date, today = today, themeMode = themeMode, typography = typography)
+                        DayHeaderItem(date = date, today = today, theme = theme, typography = typography)
                     }
                     items(dayEvents) { event ->
                         AgendaEventRow(
                             event = event,
-                            themeMode = themeMode,
+                            theme = theme,
                             opacity = opacity,
                             typography = typography
                         )
@@ -256,7 +259,7 @@ private fun AgendaContent(
 private fun DayHeaderItem(
     date: LocalDate,
     today: LocalDate,
-    themeMode: String,
+    theme: CalendarTheme,
     typography: WidgetTypography
 ) {
     val dayLabel = CalendarRepository.formatDayHeader(date, today)
@@ -269,7 +272,7 @@ private fun DayHeaderItem(
         Text(
             text = dayLabel.uppercase(Locale.getDefault()),
             style = TextStyle(
-                color = WidgetThemeHelper.getAccentColor(themeMode),
+                color = WidgetThemeHelper.getAccentColor(theme),
                 fontWeight = FontWeight.Bold,
                 fontSize = typography.headerSize
             )
@@ -280,7 +283,7 @@ private fun DayHeaderItem(
 @androidx.compose.runtime.Composable
 private fun AgendaEventRow(
     event: CalendarEvent,
-    themeMode: String,
+    theme: CalendarTheme,
     opacity: Float,
     typography: WidgetTypography
 ) {
@@ -290,11 +293,12 @@ private fun AgendaEventRow(
         putExtra(CalendarContract.EXTRA_EVENT_END_TIME, event.end)
         flags = Intent.FLAG_ACTIVITY_NEW_TASK
     }
+    val family = theme.eventColors(event.title)
 
     Box(
         modifier = GlanceModifier
             .fillMaxWidth()
-            .background(WidgetThemeHelper.getCardBackgroundColor(themeMode, opacity))
+            .background(WidgetThemeHelper.getCardBackgroundColor(theme, opacity))
             .cornerRadius(8.dp)
             .clickable(actionStartActivity(clickIntent))
             .padding(horizontal = 8.dp, vertical = 6.dp)
@@ -303,12 +307,12 @@ private fun AgendaEventRow(
             modifier = GlanceModifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Event color bar
+            // Event family bar
             Box(
                 modifier = GlanceModifier
                     .width(4.dp)
                     .height(34.dp)
-                    .background(Color(event.color))
+                    .background(family.bar)
                     .cornerRadius(2.dp)
             ) {}
 
@@ -319,7 +323,7 @@ private fun AgendaEventRow(
                 Text(
                     text = event.title,
                     style = TextStyle(
-                        color = WidgetThemeHelper.getPrimaryTextColor(themeMode),
+                        color = ColorProvider(family.title),
                         fontWeight = FontWeight.Bold,
                         fontSize = typography.titleSize
                     ),
@@ -332,14 +336,14 @@ private fun AgendaEventRow(
                     if (event.allDay) {
                         Box(
                             modifier = GlanceModifier
-                                .background(WidgetThemeHelper.getAccentColor(themeMode))
+                                .background(WidgetThemeHelper.getAccentColor(theme))
                                 .cornerRadius(4.dp)
                                 .padding(horizontal = 4.dp, vertical = 1.dp)
                         ) {
                             Text(
                                 text = "All Day",
                                 style = TextStyle(
-                                    color = ColorProvider(Color.White),
+                                    color = WidgetThemeHelper.getAccentTextColor(theme),
                                     fontWeight = FontWeight.Bold,
                                     fontSize = typography.badgeSize
                                 )
@@ -349,7 +353,7 @@ private fun AgendaEventRow(
                         Text(
                             text = CalendarRepository.formatEventTime(event),
                             style = TextStyle(
-                                color = WidgetThemeHelper.getSecondaryTextColor(themeMode),
+                                color = WidgetThemeHelper.getSecondaryTextColor(theme),
                                 fontSize = typography.subtitleSize
                             )
                         )
@@ -360,7 +364,7 @@ private fun AgendaEventRow(
                         Text(
                             text = "• ${event.location}",
                             style = TextStyle(
-                                color = WidgetThemeHelper.getSecondaryTextColor(themeMode),
+                                color = WidgetThemeHelper.getSecondaryTextColor(theme),
                                 fontSize = typography.subtitleSize
                             ),
                             maxLines = 1
@@ -375,7 +379,7 @@ private fun AgendaEventRow(
 @androidx.compose.runtime.Composable
 private fun PermissionRequiredView(
     context: Context,
-    themeMode: String,
+    theme: CalendarTheme,
     typography: WidgetTypography
 ) {
     val launchIntent = Intent(context, MainActivity::class.java).apply {
@@ -392,13 +396,14 @@ private fun PermissionRequiredView(
         Image(
             provider = ImageProvider(R.drawable.ic_calendar_event),
             contentDescription = "Permission Required",
-            modifier = GlanceModifier.size(32.dp)
+            modifier = GlanceModifier.size(32.dp),
+            colorFilter = ColorFilter.tint(WidgetThemeHelper.getPrimaryTextColor(theme))
         )
         Spacer(modifier = GlanceModifier.height(8.dp))
         Text(
             text = "Calendar Permission Needed",
             style = TextStyle(
-                color = WidgetThemeHelper.getPrimaryTextColor(themeMode),
+                color = WidgetThemeHelper.getPrimaryTextColor(theme),
                 fontWeight = FontWeight.Bold,
                 fontSize = typography.widgetHeaderSize
             )
@@ -407,14 +412,14 @@ private fun PermissionRequiredView(
         Text(
             text = "Tap to grant permission in app",
             style = TextStyle(
-                color = WidgetThemeHelper.getSecondaryTextColor(themeMode),
+                color = WidgetThemeHelper.getSecondaryTextColor(theme),
                 fontSize = typography.subtitleSize
             )
         )
         Spacer(modifier = GlanceModifier.height(12.dp))
         Box(
             modifier = GlanceModifier
-                .background(WidgetThemeHelper.getAccentColor(themeMode))
+                .background(WidgetThemeHelper.getAccentColor(theme))
                 .cornerRadius(8.dp)
                 .padding(horizontal = 14.dp, vertical = 6.dp)
                 .clickable(actionStartActivity(launchIntent))
@@ -422,7 +427,7 @@ private fun PermissionRequiredView(
             Text(
                 text = "Grant Permission",
                 style = TextStyle(
-                    color = ColorProvider(Color.White),
+                    color = WidgetThemeHelper.getAccentTextColor(theme),
                     fontWeight = FontWeight.Bold,
                     fontSize = typography.titleSize
                 )
@@ -434,7 +439,7 @@ private fun PermissionRequiredView(
 @androidx.compose.runtime.Composable
 private fun ErrorView(
     errorMessage: String,
-    themeMode: String,
+    theme: CalendarTheme,
     typography: WidgetTypography
 ) {
     Column(
@@ -445,7 +450,7 @@ private fun ErrorView(
         Text(
             text = "Unable to load calendar",
             style = TextStyle(
-                color = WidgetThemeHelper.getPrimaryTextColor(themeMode),
+                color = WidgetThemeHelper.getPrimaryTextColor(theme),
                 fontWeight = FontWeight.Bold,
                 fontSize = typography.titleSize
             )
@@ -454,7 +459,7 @@ private fun ErrorView(
         Text(
             text = errorMessage,
             style = TextStyle(
-                color = WidgetThemeHelper.getSecondaryTextColor(themeMode),
+                color = WidgetThemeHelper.getSecondaryTextColor(theme),
                 fontSize = typography.subtitleSize
             ),
             maxLines = 2

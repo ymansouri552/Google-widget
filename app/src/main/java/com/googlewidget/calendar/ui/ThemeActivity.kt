@@ -153,7 +153,7 @@ fun ThemeScreen(onBack: () -> Unit) {
         ) {
             item {
                 Text(
-                    text = "Choose how the 3-Day Timeline widget looks. One choice is saved for the whole app and placed widgets update immediately.",
+                    text = "Choose how your calendar widgets look. One choice is saved for the whole app and every placed widget — Timeline, Weekly, Agenda and Next Up — updates immediately.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

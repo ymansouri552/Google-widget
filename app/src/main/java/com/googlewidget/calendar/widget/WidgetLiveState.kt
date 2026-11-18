@@ -4,6 +4,7 @@ import androidx.datastore.preferences.core.Preferences
 import com.googlewidget.calendar.data.WidgetConfigKeys
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 /**
  * The settings + navigation state the Weekly and 3-Day compositions render from.
@@ -14,23 +15,53 @@ import kotlinx.coroutines.flow.StateFlow
  */
 data class WidgetLiveState(
     val dayOffset: Int,
+    val viewOffsetDays: Int,
+    val lastInteractionMillis: Long,
+    val chevronStepDays: Int,
+    val timelineMinHour: Int?,
+    val timelineMaxHour: Int?,
     val windowStartHour: Int?,
     val selectedCalendarIds: Set<Long>,
     val bgOpacity: Float,
-    val themeMode: String
+    val weekStart: String,
+    val selectedDate: String?
 ) {
     companion object {
         fun from(prefs: Preferences): WidgetLiveState = WidgetLiveState(
             dayOffset = (prefs[WidgetConfigKeys.KEY_DAY_OFFSET] ?: 0)
                 .coerceIn(WidgetConfigKeys.MIN_DAY_OFFSET, WidgetConfigKeys.MAX_DAY_OFFSET),
+            viewOffsetDays = (prefs[WidgetConfigKeys.KEY_VIEW_OFFSET_DAYS] ?: 0)
+                .coerceIn(WidgetConfigKeys.MIN_VIEW_OFFSET_DAYS, WidgetConfigKeys.MAX_VIEW_OFFSET_DAYS),
+            lastInteractionMillis = prefs[WidgetConfigKeys.KEY_LAST_INTERACTION_MILLIS] ?: 0L,
+            chevronStepDays = WidgetConfigKeys.normalizedChevronStep(
+                prefs[WidgetConfigKeys.KEY_CHEVRON_STEP_DAYS]
+            ),
+            timelineMinHour = prefs[WidgetConfigKeys.KEY_TIMELINE_MIN_HOUR],
+            timelineMaxHour = prefs[WidgetConfigKeys.KEY_TIMELINE_MAX_HOUR],
             windowStartHour = prefs[WidgetConfigKeys.KEY_WINDOW_START_HOUR],
             selectedCalendarIds = prefs[WidgetConfigKeys.SELECTED_CALENDARS]
                 ?.mapNotNull { it.toLongOrNull() }
                 ?.toSet()
                 ?: emptySet(),
             bgOpacity = prefs[WidgetConfigKeys.BG_OPACITY] ?: WidgetConfigKeys.DEFAULT_OPACITY,
-            themeMode = prefs[WidgetConfigKeys.THEME_MODE] ?: WidgetConfigKeys.THEME_SYSTEM
+            weekStart = WidgetConfigKeys.normalizedWeekStart(prefs[WidgetConfigKeys.KEY_WEEK_START]),
+            selectedDate = prefs[WidgetConfigKeys.KEY_SELECTED_DATE]
         )
+    }
+}
+
+/**
+ * Global refresh revision observed by live widget compositions. A scheduled
+ * refresh calls [tick] before re-rendering, so a session that Glance keeps
+ * alive still recomposes and recomputes time-dependent text such as the
+ * "Next … in 19m" pill.
+ */
+object WidgetClock {
+    private val _revision = MutableStateFlow(0L)
+    val revision: StateFlow<Long> = _revision.asStateFlow()
+
+    fun tick() = synchronized(this) {
+        _revision.value = _revision.value + 1L
     }
 }
 
@@ -57,10 +88,16 @@ object WidgetLiveStateHub {
             MutableStateFlow(
                 WidgetLiveState(
                     dayOffset = 0,
+                    viewOffsetDays = 0,
+                    lastInteractionMillis = 0L,
+                    chevronStepDays = WidgetConfigKeys.DEFAULT_CHEVRON_STEP_DAYS,
+                    timelineMinHour = null,
+                    timelineMaxHour = null,
                     windowStartHour = null,
                     selectedCalendarIds = emptySet(),
                     bgOpacity = WidgetConfigKeys.DEFAULT_OPACITY,
-                    themeMode = WidgetConfigKeys.THEME_SYSTEM
+                    weekStart = WidgetConfigKeys.DEFAULT_WEEK_START,
+                    selectedDate = null
                 )
             )
         }

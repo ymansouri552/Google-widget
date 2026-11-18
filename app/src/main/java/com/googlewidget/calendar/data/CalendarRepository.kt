@@ -157,6 +157,25 @@ class CalendarRepository(private val context: Context) {
         return result
     }
 
+    /**
+     * Queries exactly the requested interval, with no navigation buffer. The
+     * 3-Day Timeline uses this so it only ever loads the three visible days;
+     * [getUpcomingEvents] keeps its wide cache for the weekly widget.
+     */
+    fun getEventsInWindow(
+        startMillis: Long,
+        endMillis: Long,
+        selectedCalendarIds: Set<Long> = emptySet()
+    ): CalendarResult<List<CalendarEvent>> {
+        if (!hasCalendarPermission()) {
+            return CalendarResult.PermissionRequired
+        }
+        if (startMillis >= endMillis) {
+            return CalendarResult.Success(emptyList())
+        }
+        return queryInstancesFromProvider(startMillis, endMillis, selectedCalendarIds)
+    }
+
     private fun queryInstancesFromProvider(
         startMillis: Long,
         endMillis: Long,
@@ -291,6 +310,13 @@ class CalendarRepository(private val context: Context) {
                 else -> date.format(DateTimeFormatter.ofPattern("EEEE, MMM d", Locale.getDefault()))
             }
         }
+
+        /**
+         * Stable key for one calendar instance. Instances._ID and EVENT_ID can
+         * repeat for recurring events, so the start/end times are part of it.
+         */
+        fun eventInstanceKey(event: CalendarEvent): String =
+            "${event.eventId}-${event.begin}-${event.end}"
 
         fun formatEventTime(event: CalendarEvent): String {
             if (event.allDay) return "All Day"
