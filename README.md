@@ -6,14 +6,14 @@ A production-ready native Android application built with **Kotlin**, **Jetpack C
 
 ## Features
 
-### 1. Agenda Widget (`AgendaGlanceWidget`) — 4x3 Scrollable Schedule
+### 1. Agenda Widget (`AgendaGlanceWidget`): 4x3 Scrollable Schedule
 * **Date Header & Quick Actions:** Live day/date header with a **"+"** quick-add button launching Google Calendar's event creation activity and an instant refresh button.
 * **14-Day Lookahead:** High-performance `LazyColumn` grouping events under **"Today"**, **"Tomorrow"**, and **"EEEE, MMM d"**.
 * **Rich Event Cards:** Displays a colored vertical bar matching the calendar/display color, event title, formatted time or "All Day" badge, and location info.
 * **Direct Deep Linking:** Tapping an event opens the native calendar event viewer.
 * **Permission Fallback:** In-widget prompt to open the companion app when `READ_CALENDAR` permission is needed.
 
-### 2. Next Up Widget (`NextUpGlanceWidget`) — 4x1 Compact Summary Strip
+### 2. Next Up Widget (`NextUpGlanceWidget`): 4x1 Compact Summary Strip
 * **Glanceable Timeline:** Designed for minimalist home screens, featuring the immediate upcoming event.
 * **Dynamic Countdown:** Displays real-time status such as *"Starts in 25 min"*, *"Happening now (ends in 40m)"*, or *"Tomorrow at 2:00 PM"*.
 * **Day Context:** Secondary status indicator (e.g., *"3 other events today"* or *"No more events today"*).
@@ -22,7 +22,7 @@ A production-ready native Android application built with **Kotlin**, **Jetpack C
 ### 3. Widget Customization Activity (`WidgetConfigActivity`)
 * **Per-Widget Preferences:** Configured independently for each placed widget using `PreferencesGlanceStateDefinition`.
 * **Multi-Select Calendar Filter:** Choose which device calendars to include or exclude.
-* **Theme:** One app-wide choice (Soft pastel, Midnight, Glass, or Auto) colors every widget view — see below.
+* **Theme:** One app-wide choice (Soft pastel, Midnight, Glass, or Auto) colors every widget view. See below.
 * **Background Opacity:** Adjustable slider from 0% (fully transparent) to 100% (solid).
 * **Lookahead Range & Typography:** Choose 7, 14, or 30 days lookahead and Normal vs. Compact font scaling.
 
@@ -34,7 +34,7 @@ A production-ready native Android application built with **Kotlin**, **Jetpack C
 ### 3b-2. 7-Day Widget (`WeeklyCalendarGlanceWidget`)
 * **Responsive layouts:** Narrow widgets show a seven-day strip (short weekday, day number, up to four calendar-color dots, `+` for more) above a full-width agenda for the selected day; wide widgets keep the event-chip grid with start times and smaller text.
 * **Day selection:** Tapping a strip day saves the date in per-widget Glance state. Selection falls back to today, or the first visible day, whenever it falls outside the shown week; chevrons and midnight clear it.
-* **Navigation:** Chevrons move seven days, clamp to -30..+90, and auto-reset to today after ten minutes — the same state/reset rules as the Timeline. Week start is configurable as Saturday, Sunday, Monday or rolling Today.
+* **Navigation:** Chevrons move seven days, clamp to -30..+90, and auto-reset to today after ten minutes. This uses the same state/reset rules as the Timeline. Week start is configurable as Saturday, Sunday, Monday or rolling Today.
 * **Agenda ordering:** All-day events first, then the ongoing event, upcoming events, and finally ended events (dimmed). One-line 32dp rows show a color bar, fixed-width tabular time and an ellipsized title; the ongoing/next event is tagged `NOW`/`NEXT` and a "Next: … in Xm" pill sits in the agenda header. Row count is derived from `LocalSize` height; a lone leftover event is shown, while two or more get a `+N more` row that opens the day in the calendar app.
 * **Shared event colors:** `WidgetEventColors` resolves the event display color (falling back to the calendar color) once for both the Timeline and the 7-day widget, deriving the light row tint and readable ink. The strip shows at most three dots plus `+N`.
 

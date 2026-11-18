@@ -35,7 +35,7 @@ class WeeklyCalendarLogicTest {
     private fun millis(date: LocalDate, hour: Int, minute: Int = 0) =
         date.atTime(hour, minute).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
 
-    // --- Week geometry ------------------------------------------------------------------------
+    // Week geometry
 
     @Test
     fun rollingToday_startsOnToday_notOnTheLocaleWeekday() {
@@ -82,7 +82,7 @@ class WeeklyCalendarLogicTest {
         )
     }
 
-    // --- Range label ---------------------------------------------------------------------------
+    // Range label
 
     @Test
     fun rangeLabel_formatsWithinMonthAcrossMonthAndAcrossYear() {
@@ -106,7 +106,7 @@ class WeeklyCalendarLogicTest {
         )
     }
 
-    // --- Day selection -------------------------------------------------------------------------
+    // Day selection
 
     @Test
     fun selectedDate_storedDayWinsOnlyWhileVisible_thenToday_thenFirstDay() {
@@ -139,7 +139,7 @@ class WeeklyCalendarLogicTest {
         )
     }
 
-    // --- Offset / reset ------------------------------------------------------------------------
+    // Offset and reset
 
     @Test
     fun effectiveOffset_expiresAfterTenMinutes_andNeverInteractedMeansToday() {
@@ -150,7 +150,7 @@ class WeeklyCalendarLogicTest {
         assertEquals(0, WeeklyCalendarLogic.effectiveOffset(0, now, now))
     }
 
-    // --- Height-driven row counts --------------------------------------------------------------
+    // Height-driven row counts
 
     @Test
     fun rowCounts_scaleWithHeight_andStayWithinGlanceChildLimit() {
@@ -165,7 +165,7 @@ class WeeklyCalendarLogicTest {
         assertEquals(1, WeeklyCalendarLogic.chipRowCount(8f))
     }
 
-    // --- Agenda ordering / time label ----------------------------------------------------------
+    // Agenda ordering and time label
 
     @Test
     fun agendaOrdering_allDayThenOngoingThenUpcomingThenEnded() {
@@ -188,7 +188,7 @@ class WeeklyCalendarLogicTest {
         assertEquals("All day", WeeklyCalendarLogic.timeLabel(event(2, "Holiday", 0, 1, allDay = true)))
     }
 
-    // --- Overflow paging -----------------------------------------------------------------------
+    // Overflow paging
 
     @Test
     fun paginate_showsASingleLeftoverEvent_butAggregatesTwoOrMore() {
@@ -199,7 +199,7 @@ class WeeklyCalendarLogicTest {
         assertEquals(AgendaPaging(0, 0), WeeklyCalendarLogic.paginate(0, 3))
     }
 
-    // --- NOW / NEXT / ended --------------------------------------------------------------------
+    // NOW, NEXT and ended events
 
     @Test
     fun markers_tagTheOngoingAndNextEvents_andIgnoreEndedOnes() {
@@ -248,7 +248,7 @@ class WeeklyCalendarLogicTest {
         )
     }
 
-    // --- Week start default --------------------------------------------------------------------
+    // Week start default
 
     @Test
     fun weekStart_defaultsToSaturday_andEveryModeIsRespected() {

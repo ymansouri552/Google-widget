@@ -136,8 +136,8 @@ class ThreeDayTimelineGlanceWidgetTest {
     @Test
     fun testFitHierarchy_fullRangePreferredAtReducedScale_beforeWindowFallback() {
         // A 4x3 widget leaves ~154dp after the header reserve. Six busy hours
-        // need 216dp at the 0.6 floor — which used to trigger the 2-hour
-        // window fallback and blank the widget — but fit at the reduced floor,
+        // need 216dp at the 0.6 floor, which used to trigger the 2-hour
+        // window fallback and blank the widget, but fit at the reduced floor,
         // keeping the entire range visible.
         val available = 154f
         val strips = 24f
@@ -432,7 +432,7 @@ class ThreeDayTimelineGlanceWidgetTest {
         )
     }
 
-    // --- Phase 1: navigation state -----------------------------------------------------------
+    // Navigation state
 
     @Test
     fun viewOffset_clampsToMinus30AndPlus90() {
@@ -511,7 +511,7 @@ class ThreeDayTimelineGlanceWidgetTest {
         )
     }
 
-    // --- Phase 1: query/date edge cases ------------------------------------------------------
+    // Query and date edge cases
 
     @Test
     fun allDayEvent_usesUtcDate_andDoesNotAffectVisibleHours() {

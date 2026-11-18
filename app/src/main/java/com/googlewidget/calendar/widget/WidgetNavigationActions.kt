@@ -21,7 +21,7 @@ import com.googlewidget.calendar.data.WidgetConfigKeys
  *
  * All state writes go through [updateStateAndRender]: besides persisting the new
  * state it publishes it to [WidgetLiveStateHub], because a live Glance session
- * does not re-run provideGlance on update() — without the publish, taps would
+ * does not re-run provideGlance on update(). Without the publish, taps would
  * change the persisted state while the widget kept showing stale content until
  * the session died and jumped several days at once.
  */

@@ -12,7 +12,6 @@ class GoogleWidgetApp : Application() {
     override fun onCreate() {
         super.onCreate()
         ThemePreferences.ensureLoaded(this)
-        // Register ContentUri trigger observer via WorkManager
         CalendarSyncWorker.enqueue(this)
     }
 

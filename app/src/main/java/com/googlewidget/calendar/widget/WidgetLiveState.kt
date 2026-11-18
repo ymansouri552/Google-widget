@@ -72,7 +72,7 @@ object WidgetClock {
  * Why this exists: Glance 1.2 keeps each widget's composition alive as a session
  * for ~45 seconds after the last interaction. While a session is running,
  * [androidx.glance.appwidget.GlanceAppWidget.update] does NOT re-run
- * `provideGlance` — it only re-pushes the previously rendered content. A widget
+ * `provideGlance`, it only re-pushes the previously rendered content. A widget
  * that hands static content to `provideContent` therefore ignores navigation
  * taps until the session dies, and then jumps to the accumulated state at once.
  *

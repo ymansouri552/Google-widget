@@ -92,10 +92,8 @@ class CalendarRepository(private val context: Context) {
     /**
      * Retrieves calendar events for [startMillis]..[endMillis].
      *
-     * To ensure immediate responsiveness on widget chevron navigation (eliminating
-     * repeated 200-400ms ContentResolver queries on every tap), an in-memory window
-     * with a +/- 30-day buffer is cached. Consecutive navigations within the window
-     * return instantaneously (0ms) from memory.
+     * An in-memory window with a +/- 30-day buffer avoids repeated ContentResolver
+     * queries while navigating the widgets.
      */
     fun getUpcomingEvents(
         startMillis: Long,
@@ -270,7 +268,6 @@ class CalendarRepository(private val context: Context) {
             return CalendarResult.Error(e)
         }
 
-        // Maintain sort: BEGIN ASC, ALL_DAY DESC
         val sortedEvents = events.sortedWith(
             compareBy<CalendarEvent> { it.begin }
                 .thenByDescending { it.allDay }

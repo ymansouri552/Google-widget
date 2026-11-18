@@ -331,7 +331,6 @@ private fun WidgetConfigContent(
                 .fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Calendar Selection Card
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -448,7 +447,6 @@ private fun WidgetConfigContent(
                 }
             }
 
-            // Theme Options Card
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -462,8 +460,7 @@ private fun WidgetConfigContent(
                         )
                         Spacer(modifier = Modifier.height(12.dp))
 
-                        // One app-wide theme drives all four widget views. The
-                        // old per-widget Dynamic/Dark/Light mode is gone.
+                        // One app-wide theme drives all four widget views.
                         val selection by ThemePreferences.selection.collectAsState()
                         LaunchedEffect(Unit) { ThemePreferences.ensureLoaded(context) }
                         val themeLabel = if (CalendarThemes.isAuto(selection.themeId)) {
@@ -496,7 +493,6 @@ private fun WidgetConfigContent(
 
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        // Background Opacity
                         val percentage = (opacity * 100).roundToInt()
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -521,7 +517,6 @@ private fun WidgetConfigContent(
 
                         Spacer(modifier = Modifier.height(12.dp))
 
-                        // Font Scale
                         Text(
                             text = "Font Scale",
                             style = MaterialTheme.typography.bodyMedium
@@ -548,7 +543,6 @@ private fun WidgetConfigContent(
                 }
             }
 
-            // 3-Day Timeline navigation step
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -594,7 +588,6 @@ private fun WidgetConfigContent(
                 }
             }
 
-            // Optional timeline hour bounds
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -648,7 +641,6 @@ private fun WidgetConfigContent(
                 }
             }
 
-            // 7-Day widget week start
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -691,7 +683,6 @@ private fun WidgetConfigContent(
                 }
             }
 
-            // Lookahead Days Card (For Agenda)
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -732,7 +723,6 @@ private fun WidgetConfigContent(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // Save Button
         Button(
             onClick = {
                 onSave(

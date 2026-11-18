@@ -14,7 +14,7 @@ import java.time.ZoneId
  * Keeps the Next Up widget's countdown text from going stale between the
  * 30-minute system update ticks. Schedules a one-shot alarm at the next
  * transition of the currently shown event (start or end) that re-renders the
- * widget — the new render then reschedules for its own next boundary.
+ * widget, and the new render then reschedules for its own next boundary.
  */
 object NextUpRefreshScheduler {
 

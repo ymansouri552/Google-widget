@@ -66,7 +66,7 @@ class AgendaGlanceWidget : GlanceAppWidget() {
         val lookaheadDays = prefs[WidgetConfigKeys.LOOKAHEAD_DAYS] ?: WidgetConfigKeys.DEFAULT_LOOKAHEAD_DAYS
         val fontScale = prefs[WidgetConfigKeys.FONT_SCALE] ?: WidgetConfigKeys.FONT_SCALE_NORMAL
 
-        // Fast provideGlance execution: load calendar data on IO before provideContent
+        // Calendar data loads on IO before provideContent.
         val repository = CalendarRepository(context)
         val now = System.currentTimeMillis()
         val endMillis = now + (lookaheadDays.toLong() * 24 * 60 * 60 * 1000L)
@@ -146,14 +146,12 @@ private fun AgendaContent(
     val headerDateStr = today.format(DateTimeFormatter.ofPattern("EEEE, MMM d", Locale.getDefault()))
 
     Column(modifier = GlanceModifier.fillMaxSize()) {
-        // Widget Header
         Row(
             modifier = GlanceModifier
                 .fillMaxWidth()
                 .padding(bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Calendar icon + Date header
             Image(
                 provider = ImageProvider(R.drawable.ic_calendar_event),
                 contentDescription = "Calendar",
@@ -172,7 +170,6 @@ private fun AgendaContent(
                 modifier = GlanceModifier.defaultWeight()
             )
 
-            // Action: Add new event
             val addEventIntent = Intent(Intent.ACTION_INSERT).apply {
                 data = CalendarContract.Events.CONTENT_URI
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK
@@ -195,7 +192,6 @@ private fun AgendaContent(
 
             Spacer(modifier = GlanceModifier.width(6.dp))
 
-            // Action: Refresh
             Box(
                 modifier = GlanceModifier
                     .size(30.dp)
@@ -213,7 +209,6 @@ private fun AgendaContent(
             }
         }
 
-        // Event List
         if (events.isEmpty()) {
             Box(
                 modifier = GlanceModifier
@@ -232,7 +227,7 @@ private fun AgendaContent(
                 }
             }
         } else {
-            // Group events by day using the correct UTC/System timezone per Guardrail 3
+            // All-day and timed events use different date sources.
             val groupedEvents = events.groupBy { CalendarRepository.getEventLocalDate(it) }
 
             LazyColumn(modifier = GlanceModifier.fillMaxSize()) {
@@ -307,7 +302,6 @@ private fun AgendaEventRow(
             modifier = GlanceModifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Event family bar
             Box(
                 modifier = GlanceModifier
                     .width(4.dp)
@@ -318,7 +312,6 @@ private fun AgendaEventRow(
 
             Spacer(modifier = GlanceModifier.width(8.dp))
 
-            // Event Details
             Column(modifier = GlanceModifier.defaultWeight()) {
                 Text(
                     text = event.title,

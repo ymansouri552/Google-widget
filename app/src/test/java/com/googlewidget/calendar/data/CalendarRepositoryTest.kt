@@ -58,7 +58,7 @@ class CalendarRepositoryTest {
         return event(begin, end)
     }
 
-    // --- formatNextUpCountdown: timed events -------------------------------------------------
+    // formatNextUpCountdown: timed events
 
     @Test
     fun countdown_startsInMinutes() {
@@ -104,7 +104,7 @@ class CalendarRepositoryTest {
         assertEquals("Ended", CalendarRepository.formatNextUpCountdown(e, now))
     }
 
-    // --- formatNextUpCountdown: all-day events (regression: bug #2) ---------------------------
+    // formatNextUpCountdown: all-day events (regression: bug #2)
 
     @Test
     fun countdown_allDayToday() {
@@ -127,7 +127,7 @@ class CalendarRepositoryTest {
         assertEquals("In 4 days", CalendarRepository.formatNextUpCountdown(e, now))
     }
 
-    // --- getEventLocalDate: all-day UTC guardrail ---------------------------------------------
+    // getEventLocalDate: all-day UTC guardrail
 
     @Test
     fun eventDate_allDayUsesUtc() {
@@ -141,7 +141,7 @@ class CalendarRepositoryTest {
         assertEquals(LocalDate.of(2026, 6, 1), CalendarRepository.getEventLocalDate(e))
     }
 
-    // --- formatDayHeader / formatEventTime ----------------------------------------------------
+    // formatDayHeader and formatEventTime
 
     @Test
     fun dayHeader_relativeLabels() {
@@ -160,7 +160,7 @@ class CalendarRepositoryTest {
         assertEquals("All Day", CalendarRepository.formatEventTime(e))
     }
 
-    // --- CachedWindow and range filtering ----------------------------------------------------
+    // CachedWindow and range filtering
 
     @Test
     fun cachedWindow_filtersWithinBounds() {

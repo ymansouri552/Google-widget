@@ -33,8 +33,7 @@ class CalendarBroadcastReceiver : BroadcastReceiver() {
                 }
                 WidgetClock.tick()
 
-                // Only spend the ( comparatively expensive ) re-render pass when a
-                // widget is actually placed on the home screen.
+                // Skip the expensive re-render pass when no widget is placed.
                 if (WidgetPlacement.hasAnyWidget(context)) {
                     AgendaGlanceWidget().updateAll(context)
                     NextUpGlanceWidget().updateAll(context)

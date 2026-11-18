@@ -36,20 +36,6 @@ import com.googlewidget.calendar.R
 import com.googlewidget.calendar.data.WidgetConfigKeys
 import com.googlewidget.calendar.ui.WidgetConfigActivity
 import com.googlewidget.calendar.ui.theme.CalendarTheme
-import java.time.LocalDate
-import java.time.format.DateTimeFormatter
-import java.util.Locale
-
-/** "March" / "Mar – Apr" / "Mar 2025 – Apr 2026" header for a day range. */
-internal fun monthTitleFor(first: LocalDate, last: LocalDate): String {
-    return if (first.month == last.month && first.year == last.year) {
-        first.format(DateTimeFormatter.ofPattern("MMMM", Locale.getDefault()))
-    } else if (first.year == last.year) {
-        "${first.format(DateTimeFormatter.ofPattern("MMM", Locale.getDefault()))} – ${last.format(DateTimeFormatter.ofPattern("MMM", Locale.getDefault()))}"
-    } else {
-        "${first.format(DateTimeFormatter.ofPattern("MMM yyyy", Locale.getDefault()))} – ${last.format(DateTimeFormatter.ofPattern("MMM yyyy", Locale.getDefault()))}"
-    }
-}
 
 @Composable
 fun WidgetTopBar(

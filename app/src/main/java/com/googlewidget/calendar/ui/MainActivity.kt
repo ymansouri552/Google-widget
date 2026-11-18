@@ -123,15 +123,13 @@ fun MainScreen() {
         isLoading = true
         scope.launch(Dispatchers.IO) {
             try {
-                // Update all widgets and enqueue background sync
-                AgendaGlanceWidget().updateAll(context)
+                        AgendaGlanceWidget().updateAll(context)
                 NextUpGlanceWidget().updateAll(context)
                 WeeklyCalendarGlanceWidget().updateAll(context)
                 ThreeDayTimelineGlanceWidget().updateAll(context)
                 CalendarSyncWorker.enqueue(context)
 
-                // Load preview data
-                val calList = repository.getCalendars()
+                        val calList = repository.getCalendars()
                 val now = System.currentTimeMillis()
                 val end = now + (7L * 24 * 60 * 60 * 1000L)
                 val eventResult = repository.getUpcomingEvents(now, end)
@@ -271,8 +269,7 @@ fun MainScreen() {
                     }
                 }
             } else {
-                // Action Controls Card
-                item {
+                    item {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         colors = CardDefaults.cardColors(
@@ -327,8 +324,7 @@ fun MainScreen() {
                     }
                 }
 
-                // Widget Guide Card
-                item {
+                    item {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         colors = CardDefaults.cardColors(
@@ -363,8 +359,7 @@ fun MainScreen() {
                     }
                 }
 
-                // Detected Calendars Section
-                item {
+                    item {
                     Text(
                         text = "Detected Calendars (${calendars.size})",
                         style = MaterialTheme.typography.titleMedium
@@ -404,7 +399,6 @@ fun MainScreen() {
                     }
                 }
 
-                // Upcoming Schedule Preview
                 item {
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(

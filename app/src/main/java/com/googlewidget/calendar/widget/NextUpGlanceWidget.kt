@@ -62,7 +62,7 @@ class NextUpGlanceWidget : GlanceAppWidget() {
         val opacity = prefs[WidgetConfigKeys.BG_OPACITY] ?: WidgetConfigKeys.DEFAULT_OPACITY
         val fontScale = prefs[WidgetConfigKeys.FONT_SCALE] ?: WidgetConfigKeys.FONT_SCALE_NORMAL
 
-        // Fast provideGlance execution: load calendar data on IO before provideContent
+        // Calendar data loads on IO before provideContent.
         val repository = CalendarRepository(context)
         val now = System.currentTimeMillis()
         val endMillis = now + (3 * 24 * 60 * 60 * 1000L) // 3-day window for immediate upcoming
@@ -139,7 +139,6 @@ private fun NextUpContent(
     typography: WidgetTypography,
     now: Long
 ) {
-    // Only consider events that have not ended yet
     val activeEvents = events.filter { it.end > now }
     val nextEvent = activeEvents.firstOrNull()
 
@@ -196,7 +195,6 @@ private fun ActiveNextUpStrip(
             .clickable(actionStartActivity(clickIntent)),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Event family bar
         Box(
             modifier = GlanceModifier
                 .width(4.dp)
@@ -207,12 +205,10 @@ private fun ActiveNextUpStrip(
 
         Spacer(modifier = GlanceModifier.width(10.dp))
 
-        // Center: Event title + countdown + secondary count
         Column(
             modifier = GlanceModifier.defaultWeight(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Title
             Text(
                 text = nextEvent.title,
                 style = TextStyle(
@@ -225,7 +221,6 @@ private fun ActiveNextUpStrip(
 
             Spacer(modifier = GlanceModifier.height(2.dp))
 
-            // Timing indicator line
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = countdownText,
@@ -252,7 +247,6 @@ private fun ActiveNextUpStrip(
 
             Spacer(modifier = GlanceModifier.height(2.dp))
 
-            // Secondary line: other events remaining today
             Text(
                 text = secondaryText,
                 style = TextStyle(
@@ -265,7 +259,6 @@ private fun ActiveNextUpStrip(
 
         Spacer(modifier = GlanceModifier.width(8.dp))
 
-        // Right Action: Refresh
         Box(
             modifier = GlanceModifier
                 .size(30.dp)
