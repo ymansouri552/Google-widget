@@ -275,4 +275,35 @@ class WeeklyCalendarLogicTest {
             WeeklyCalendarLogic.weekDates(today, 0, WidgetConfigKeys.WEEK_START_TODAY, locale).first()
         )
     }
+
+    // Daily stats
+
+    @Test
+    fun dailyStats_countsTimedEvents_sumsDurations_andFindsLatestEnd() {
+        val first = event(1, "Teen 5", millis(today, 15, 0), millis(today, 16, 30))
+        val second = event(2, "Teen 4", millis(today, 16, 45), millis(today, 18, 15))
+        val third = event(3, "Teen 4", millis(today, 20, 15), millis(today, 21, 45))
+        val allDay = event(4, "Holiday", millis(today, 0), millis(today, 23), allDay = true)
+
+        assertEquals(
+            DailyStats(3, 4L * 60 + 30, millis(today, 21, 45)),
+            WeeklyCalendarLogic.dailyStats(listOf(allDay, third, first, second))
+        )
+    }
+
+    @Test
+    fun dailyStats_emptyDay_hasNoClassesAndNoFinishTime() {
+        assertEquals(
+            DailyStats(0, 0L, null),
+            WeeklyCalendarLogic.dailyStats(emptyList())
+        )
+    }
+
+    @Test
+    fun formatTeachingTime_rendersHoursMinutesAndZero() {
+        assertEquals("4h 30m", WeeklyCalendarLogic.formatTeachingTime(270))
+        assertEquals("4h", WeeklyCalendarLogic.formatTeachingTime(240))
+        assertEquals("45m", WeeklyCalendarLogic.formatTeachingTime(45))
+        assertEquals("0m", WeeklyCalendarLogic.formatTeachingTime(0))
+    }
 }

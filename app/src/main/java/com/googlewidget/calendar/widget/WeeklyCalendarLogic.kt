@@ -23,6 +23,11 @@ object WeeklyCalendarLogic {
     /** Chips need roughly 64dp each before titles stop being useful. */
     const val WIDE_LAYOUT_MIN_WIDTH_DP = 448f
 
+    /** Below this width the stats panel becomes a single compact line. */
+    const val TWO_COLUMN_MIN_WIDTH_DP = 300f
+    const val STATS_MIN_WIDTH_DP = 108f
+    const val STATS_MAX_WIDTH_DP = 164f
+
     private const val AGENDA_ROW_HEIGHT_DP = 32f
     private const val AGENDA_TOP_RESERVE_DP = 6f
     private const val CHIP_ROW_HEIGHT_DP = 22f
@@ -199,7 +204,37 @@ object WeeklyCalendarLogic {
             ?: return null
         return "Next: ${next.title} in ${countdownText(next.begin, nowMillis)}"
     }
+
+    /**
+     * All-day entries are not classes, so only timed events feed the stats. An
+     * event that crosses midnight contributes its full duration on its start day.
+     */
+    fun dailyStats(events: List<CalendarEvent>): DailyStats {
+        val timed = events.filter { !it.allDay }
+        return DailyStats(
+            classCount = timed.size,
+            teachingMinutes = timed.sumOf { (it.end - it.begin).coerceAtLeast(0L) / 60_000L },
+            lastEndMillis = timed.maxByOrNull { it.end }?.end
+        )
+    }
+
+    fun formatTeachingTime(minutes: Long): String {
+        val hours = minutes / 60
+        val mins = minutes % 60
+        return when {
+            hours > 0 && mins > 0 -> "${hours}h ${mins}m"
+            hours > 0 -> "${hours}h"
+            else -> "${mins}m"
+        }
+    }
 }
+
+/** Counts and durations for the selected day, derived from its timed events. */
+data class DailyStats(
+    val classCount: Int,
+    val teachingMinutes: Long,
+    val lastEndMillis: Long?
+)
 
 /** How many events fit, and how many remain behind an overflow row. */
 data class AgendaPaging(val visible: Int, val overflow: Int)

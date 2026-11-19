@@ -51,11 +51,12 @@ A production-ready native Android application built with **Kotlin**, **Jetpack C
 * **System Event Receiver (`CalendarBroadcastReceiver`):** Automatically refreshes widgets upon `TIME_SET`, `TIMEZONE_CHANGED`, `DATE_CHANGED`, `BOOT_COMPLETED`, and `PROVIDER_CHANGED`.
 
 ### 5. Companion App (`MainActivity`)
-* Clean Material 3 interface requesting `Manifest.permission.READ_CALENDAR`.
-* Instant sync trigger upon permission grant.
-* Detected calendar listing with color badges and account details.
-* Live 7-day upcoming event preview.
-* Step-by-step home screen placement guide.
+* **Four-tab Material 3 shell:** Today, Calendar, Tasks and Settings, with a bottom navigation bar and a quick-add button for tasks.
+* **Today:** the day's Google Calendar events, personal tasks due today, a next-event countdown and a daily stats strip (class count, teaching time, last finish).
+* **Calendar:** a week strip built from `WeeklyCalendarLogic` and the selected day's events. Week start follows the widget setting.
+* **Tasks:** local to-dos stored in DataStore preferences. Add, edit, complete and delete tasks, with filters for All, Today, Upcoming, No date and Completed. Pure sorting and filtering live in `TaskLogic` and are unit tested.
+* **Settings:** theme launcher, calendar permission status, connected Google calendars and the widget placement guide.
+* Calendar data is still read from `CalendarRepository`; tasks are a separate local store, so no `WRITE_CALENDAR` permission is required.
 
 ---
 

@@ -13,8 +13,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.glance.ColorFilter
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
+import androidx.glance.Image
+import androidx.glance.ImageProvider
 import androidx.glance.LocalSize
 import androidx.glance.action.actionParametersOf
 import androidx.glance.action.clickable
@@ -52,6 +55,7 @@ import com.googlewidget.calendar.data.CalendarEvent
 import com.googlewidget.calendar.data.CalendarRepository
 import com.googlewidget.calendar.data.CalendarResult
 import com.googlewidget.calendar.data.WidgetConfigKeys
+import com.googlewidget.calendar.R
 import com.googlewidget.calendar.ui.MainActivity
 import com.googlewidget.calendar.ui.theme.CalendarTheme
 import kotlinx.coroutines.Dispatchers
@@ -225,6 +229,7 @@ private fun WeeklyWidgetRoot(
                         dayLabels = dayLabels,
                         selectedDate = selectedDate,
                         eventsByDate = eventsByDate,
+                        availableWidthDp = widthDp,
                         availableHeightDp = heightDp,
                         theme = theme
                     )
@@ -263,6 +268,7 @@ private fun NarrowWeekContent(
     dayLabels: List<String>,
     selectedDate: LocalDate,
     eventsByDate: Map<LocalDate, List<CalendarEvent>>,
+    availableWidthDp: Float,
     availableHeightDp: Float,
     theme: CalendarTheme
 ) {
@@ -301,6 +307,7 @@ private fun NarrowWeekContent(
             events = dayEvents,
             rowCount = WeeklyCalendarLogic.agendaRowCount(availableHeightDp - HEADER_RESERVE_DP),
             nowMillis = nowMillis,
+            availableWidthDp = availableWidthDp,
             theme = theme
         )
     }
@@ -429,13 +436,18 @@ private fun AgendaList(
     events: List<CalendarEvent>,
     rowCount: Int,
     nowMillis: Long,
+    availableWidthDp: Float,
     theme: CalendarTheme
 ) {
     val sorted = WeeklyCalendarLogic.sortAgendaEvents(events, nowMillis)
     val paging = WeeklyCalendarLogic.paginate(sorted.size, rowCount)
     val markers = WeeklyCalendarLogic.agendaMarkers(events, nowMillis)
     val nextPill = WeeklyCalendarLogic.nextPill(events, nowMillis)
+    val stats = WeeklyCalendarLogic.dailyStats(events)
     val mutedInk = WidgetThemeHelper.getSecondaryTextColor(theme)
+    val twoColumns = availableWidthDp >= WeeklyCalendarLogic.TWO_COLUMN_MIN_WIDTH_DP
+    val statsWidthDp = (availableWidthDp * 0.32f)
+        .coerceIn(WeeklyCalendarLogic.STATS_MIN_WIDTH_DP, WeeklyCalendarLogic.STATS_MAX_WIDTH_DP)
 
     Column(modifier = GlanceModifier.fillMaxSize()) {
         Row(
@@ -469,42 +481,199 @@ private fun AgendaList(
             }
         }
 
-        if (events.isEmpty()) {
-            Text(
-                text = "No events",
-                style = TextStyle(color = mutedInk, fontSize = 12.sp),
-                modifier = GlanceModifier.padding(top = 12.dp)
-            )
-        } else {
-            sorted.take(paging.visible).forEach { event ->
-                val tag = when (event.eventId) {
-                    markers.nowEventId -> "NOW"
-                    markers.nextEventId -> "NEXT"
-                    else -> null
+        Row(modifier = GlanceModifier.fillMaxSize()) {
+            Column(modifier = GlanceModifier.defaultWeight()) {
+                if (events.isEmpty()) {
+                    Text(
+                        text = "No events",
+                        style = TextStyle(color = mutedInk, fontSize = 12.sp),
+                        modifier = GlanceModifier.padding(top = 12.dp)
+                    )
+                } else {
+                    sorted.take(paging.visible).forEach { event ->
+                        val tag = when (event.eventId) {
+                            markers.nowEventId -> "NOW"
+                            markers.nextEventId -> "NEXT"
+                            else -> null
+                        }
+                        AgendaRow(
+                            event = event,
+                            tag = tag,
+                            dimmed = WeeklyCalendarLogic.isEnded(event, nowMillis),
+                            theme = theme
+                        )
+                    }
+                    if (paging.overflow > 0) {
+                        Text(
+                            text = "+${paging.overflow} more",
+                            style = TextStyle(
+                                color = WidgetThemeHelper.getPrimaryTextColor(theme),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium
+                            ),
+                            modifier = GlanceModifier
+                                .fillMaxWidth()
+                                .clickable(actionStartActivity(openDayIntent(context, date)))
+                                .padding(vertical = 4.dp)
+                        )
+                    }
                 }
-                AgendaRow(
-                    event = event,
-                    tag = tag,
-                    dimmed = WeeklyCalendarLogic.isEnded(event, nowMillis),
-                    theme = theme
-                )
             }
-            if (paging.overflow > 0) {
-                Text(
-                    text = "+${paging.overflow} more",
-                    style = TextStyle(
-                        color = WidgetThemeHelper.getPrimaryTextColor(theme),
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Medium
-                    ),
+
+            if (twoColumns) {
+                Spacer(
                     modifier = GlanceModifier
-                        .fillMaxWidth()
-                        .clickable(actionStartActivity(openDayIntent(context, date)))
-                        .padding(vertical = 4.dp)
+                        .width(1.dp)
+                        .fillMaxHeight()
+                        .background(WidgetThemeHelper.getDividerColor(theme))
                 )
+                DailyStatsPanel(stats = stats, width = statsWidthDp.dp, theme = theme)
             }
         }
+
+        if (!twoColumns) {
+            CompactStatsRow(stats = stats, theme = theme)
+        }
     }
+}
+
+@Composable
+private fun DailyStatsPanel(stats: DailyStats, width: androidx.compose.ui.unit.Dp, theme: CalendarTheme) {
+    val accent = WidgetThemeHelper.getAccentColor(theme)
+    val accentInk = WidgetThemeHelper.getAccentTextColor(theme)
+    // Every value starts after the same icon-width slot, so the three stats
+    // read as one aligned column instead of three unrelated rows.
+    val valueIndent = 17.dp
+    Box(
+        modifier = GlanceModifier
+            .width(width)
+            .fillMaxHeight()
+            .background(theme.chipBg)
+            .cornerRadius(10.dp)
+            .padding(horizontal = 8.dp, vertical = 6.dp)
+    ) {
+        Column(modifier = GlanceModifier.fillMaxSize()) {
+            Row(
+                modifier = GlanceModifier.fillMaxWidth().height(17.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Image(
+                    provider = ImageProvider(R.drawable.ic_school_cap),
+                    contentDescription = null,
+                    modifier = GlanceModifier.size(13.dp),
+                    colorFilter = ColorFilter.tint(accent)
+                )
+                Spacer(modifier = GlanceModifier.width(4.dp))
+                Text(
+                    text = "Today",
+                    style = TextStyle(
+                        color = accentInk,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
+                    ),
+                    maxLines = 1
+                )
+            }
+            Row(
+                modifier = GlanceModifier.fillMaxWidth().height(28.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Spacer(modifier = GlanceModifier.width(valueIndent))
+                Text(
+                    text = stats.classCount.toString(),
+                    style = TextStyle(
+                        color = WidgetThemeHelper.getPrimaryTextColor(theme),
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Bold
+                    ),
+                    maxLines = 1
+                )
+                Spacer(modifier = GlanceModifier.width(4.dp))
+                Text(
+                    text = "Classes",
+                    style = TextStyle(
+                        color = WidgetThemeHelper.getSecondaryTextColor(theme),
+                        fontSize = 11.sp
+                    ),
+                    maxLines = 1
+                )
+            }
+            StatsDivider(theme)
+            StatLine(
+                iconRes = R.drawable.ic_clock,
+                value = WeeklyCalendarLogic.formatTeachingTime(stats.teachingMinutes),
+                label = "Teaching time",
+                theme = theme
+            )
+            StatsDivider(theme)
+            StatLine(
+                iconRes = R.drawable.ic_calendar_check,
+                value = stats.lastEndMillis?.let { ThreeDayTimelineGlanceWidget.formatTime(it) } ?: "-",
+                label = "Last class ends",
+                theme = theme
+            )
+        }
+    }
+}
+
+@Composable
+private fun StatsDivider(theme: CalendarTheme) {
+    Spacer(
+        modifier = GlanceModifier
+            .fillMaxWidth()
+            .height(1.dp)
+            .background(WidgetThemeHelper.getDividerColor(theme))
+    )
+}
+
+@Composable
+private fun StatLine(iconRes: Int, value: String, label: String, theme: CalendarTheme) {
+    Row(
+        modifier = GlanceModifier.fillMaxWidth().height(36.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Image(
+            provider = ImageProvider(iconRes),
+            contentDescription = null,
+            modifier = GlanceModifier.size(13.dp),
+            colorFilter = ColorFilter.tint(WidgetThemeHelper.getAccentColor(theme))
+        )
+        Spacer(modifier = GlanceModifier.width(4.dp))
+        Column(modifier = GlanceModifier.defaultWeight()) {
+            Text(
+                text = value,
+                style = TextStyle(
+                    color = WidgetThemeHelper.getPrimaryTextColor(theme),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold
+                ),
+                maxLines = 1
+            )
+            Text(
+                text = label,
+                style = TextStyle(
+                    color = WidgetThemeHelper.getSecondaryTextColor(theme),
+                    fontSize = 9.sp
+                ),
+                maxLines = 1
+            )
+        }
+    }
+}
+
+@Composable
+private fun CompactStatsRow(stats: DailyStats, theme: CalendarTheme) {
+    val end = stats.lastEndMillis?.let { ThreeDayTimelineGlanceWidget.formatTime(it) } ?: "-"
+    Text(
+        text = "${stats.classCount} classes · " +
+            "${WeeklyCalendarLogic.formatTeachingTime(stats.teachingMinutes)} · ends $end",
+        style = TextStyle(
+            color = WidgetThemeHelper.getSecondaryTextColor(theme),
+            fontSize = 9.sp
+        ),
+        maxLines = 1,
+        modifier = GlanceModifier.fillMaxWidth().padding(top = 4.dp)
+    )
 }
 
 @Composable
