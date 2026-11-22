@@ -21,7 +21,8 @@ object ThemePreferences {
     private const val PREFS_NAME = "calendar_widget_theme"
     private const val KEY_THEME_ID = "selected_theme_id"
 
-    private val _selection = MutableStateFlow(ThemeSelection(CalendarThemes.AUTO))
+    // Neon Purple is the default so first launch opens on the companion app concept.
+    private val _selection = MutableStateFlow(ThemeSelection(CalendarThemes.NEON_PURPLE))
     val selection: StateFlow<ThemeSelection> = _selection.asStateFlow()
 
     @Volatile
@@ -31,7 +32,7 @@ object ThemePreferences {
     fun ensureLoaded(context: Context) {
         if (loaded) return
         val saved = prefs(context).getString(KEY_THEME_ID, null)
-        val id = if (CalendarThemes.byId(saved) != null) saved!! else CalendarThemes.AUTO
+        val id = if (CalendarThemes.byId(saved) != null) saved!! else CalendarThemes.NEON_PURPLE
         _selection.value = ThemeSelection(id, _selection.value.revision)
         loaded = true
     }
@@ -43,7 +44,7 @@ object ThemePreferences {
 
     fun setSelectedId(context: Context, themeId: String) {
         ensureLoaded(context)
-        val normalized = if (CalendarThemes.byId(themeId) != null) themeId else CalendarThemes.AUTO
+        val normalized = if (CalendarThemes.byId(themeId) != null) themeId else CalendarThemes.NEON_PURPLE
         prefs(context).edit().putString(KEY_THEME_ID, normalized).apply()
         _selection.value = ThemeSelection(normalized, _selection.value.revision + 1)
     }

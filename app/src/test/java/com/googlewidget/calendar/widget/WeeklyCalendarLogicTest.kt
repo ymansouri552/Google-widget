@@ -184,7 +184,7 @@ class WeeklyCalendarLogicTest {
     @Test
     fun timeLabel_uses24HourRangeAndAllDay() {
         val timed = event(1, "Class", millis(today, 9), millis(today, 10))
-        assertEquals("09:00-10:00", WeeklyCalendarLogic.timeLabel(timed))
+        assertEquals("09:00–10:00", WeeklyCalendarLogic.timeLabel(timed))
         assertEquals("All day", WeeklyCalendarLogic.timeLabel(event(2, "Holiday", 0, 1, allDay = true)))
     }
 
@@ -239,11 +239,11 @@ class WeeklyCalendarLogicTest {
     @Test
     fun agendaHeaderLabel_isLocalizedAndPluralized() {
         assertEquals(
-            "Wed 18 Nov · 5 events",
+            "Wed 18 Nov • 5 events",
             WeeklyCalendarLogic.agendaHeaderLabel(today, 5, locale)
         )
         assertEquals(
-            "Wed 18 Nov · 1 event",
+            "Wed 18 Nov • 1 event",
             WeeklyCalendarLogic.agendaHeaderLabel(today, 1, locale)
         )
     }

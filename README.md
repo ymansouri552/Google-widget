@@ -27,9 +27,10 @@ A production-ready native Android application built with **Kotlin**, **Jetpack C
 * **Lookahead Range & Typography:** Choose 7, 14, or 30 days lookahead and Normal vs. Compact font scaling.
 
 ### 3b. Widget Themes (`ThemeActivity`)
-* **Four choices:** Soft pastel, Midnight, Glass, and Auto (Glass in light mode, Midnight in dark mode).
+* **Five choices:** Soft pastel, Midnight, Neon Purple, Glass, and Auto (Glass in light mode, Midnight in dark mode). Neon Purple is the default for a fresh install.
 * **Live previews:** Every card renders the sample events (Teen 5, Teen 4, 301, 103) with that theme's colors, and Glass previews sit on a teal wallpaper so the translucency is visible.
 * **One-tap apply:** The choice is saved app-wide (SharedPreferences) and every placed widget is refreshed immediately; Auto also refreshes on system light/dark changes. The 3-Day Timeline, Weekly, Agenda and Next Up views all use the same theme tokens.
+* **Companion app:** `GoogleWidgetTheme` resolves the same selection into a Material 3 color scheme and exposes it as `LocalCalendarTheme`. The app background, accent, date circle, chips and event colors therefore change with the widget theme; Today and Calendar use the same event families as the widgets.
 
 ### 3b-2. 7-Day Widget (`WeeklyCalendarGlanceWidget`)
 * **Responsive layouts:** Narrow widgets show a seven-day strip (short weekday, day number, up to four calendar-color dots, `+` for more) above a full-width agenda for the selected day; wide widgets keep the event-chip grid with start times and smaller text.
@@ -55,8 +56,10 @@ A production-ready native Android application built with **Kotlin**, **Jetpack C
 * **Today:** the day's Google Calendar events, personal tasks due today, a next-event countdown and a daily stats strip (class count, teaching time, last finish).
 * **Calendar:** a week strip built from `WeeklyCalendarLogic` and the selected day's events. Week start follows the widget setting.
 * **Tasks:** local to-dos stored in DataStore preferences. Add, edit, complete and delete tasks, with filters for All, Today, Upcoming, No date and Completed. Pure sorting and filtering live in `TaskLogic` and are unit tested.
-* **Settings:** theme launcher, calendar permission status, connected Google calendars and the widget placement guide.
-* Calendar data is still read from `CalendarRepository`; tasks are a separate local store, so no `WRITE_CALENDAR` permission is required.
+* **Settings:** theme launcher with the active palette name, calendar permission status, a switch per connected Google calendar, and the widget placement guide. Disabled calendar ids are stored app-wide in DataStore by `CalendarVisibilityRepository` and filter the Today and Calendar event queries; each widget keeps its own calendar selection. "Show all" clears the disabled set.
+* Real task counts drive the completion bars on Today and Tasks. Event bars, dots, `NOW`/`NEXT` tags and duration labels come from calendar data and the selected theme, not placeholder content.
+* The companion app follows the Neon Purple concept: greeting header, live clock, search, upcoming-event hero card, task list and a five-slot bottom bar on Today; Day/Week/Month switch, Monday-first week strip, month grid and an hour timeline with overlap lanes and a scheduling CTA on Calendar. See `DESIGN-NEON.md` for the concept analysis and design decisions.
+* Calendar data is still read from `CalendarRepository`; tasks and calendar visibility are separate local stores, so no `WRITE_CALENDAR` permission is required.
 
 ---
 

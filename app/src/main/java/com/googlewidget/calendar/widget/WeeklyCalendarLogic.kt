@@ -135,12 +135,12 @@ object WeeklyCalendarLogic {
             .toInt()
             .coerceIn(1, MAX_CHIP_ROWS))
 
-    /** "HH:mm-HH:mm" for a timed event, "All day" otherwise. */
+    /** "HH:mm–HH:mm" for a timed event, "All day" otherwise. */
     fun timeLabel(event: CalendarEvent, zone: ZoneId = ZoneId.systemDefault()): String =
         if (event.allDay) {
             "All day"
         } else {
-            "${ThreeDayTimelineGlanceWidget.formatTime(event.begin, zone)}-" +
+            "${ThreeDayTimelineGlanceWidget.formatTime(event.begin, zone)}–" +
                 ThreeDayTimelineGlanceWidget.formatTime(event.end, zone)
         }
 
@@ -186,14 +186,14 @@ object WeeklyCalendarLogic {
         }
     }
 
-    /** "Wed 18 Nov · 5 events", localized. */
+    /** "Wed 18 Nov • 5 events", localized. */
     fun agendaHeaderLabel(
         date: LocalDate,
         eventCount: Int,
         locale: Locale = Locale.getDefault()
     ): String {
         val day = date.format(DateTimeFormatter.ofPattern("EEE d MMM", locale))
-        return "$day · $eventCount event${if (eventCount == 1) "" else "s"}"
+        return "$day • $eventCount event${if (eventCount == 1) "" else "s"}"
     }
 
     /** Hidden when the selected day has no upcoming event. */

@@ -1,6 +1,7 @@
 package com.googlewidget.calendar.ui.app
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -20,7 +21,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -38,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import com.googlewidget.calendar.data.TaskFilter
 import com.googlewidget.calendar.data.TaskItem
 import com.googlewidget.calendar.data.TaskLogic
+import com.googlewidget.calendar.ui.theme.LocalCalendarTheme
 import java.time.LocalDate
 
 @Composable
@@ -49,10 +54,29 @@ fun TasksScreen(
     onDelete: (String) -> Unit,
     onEdit: (TaskItem) -> Unit
 ) {
+    val theme = LocalCalendarTheme.current
     var filter by remember { mutableStateOf(TaskFilter.ALL) }
     val visible = TaskLogic.filter(tasks, filter, today)
+    val doneCount = tasks.count { it.done }
 
     Column(modifier.fillMaxSize().padding(16.dp)) {
+        Card(colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )) {
+            Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                Text("$doneCount of ${tasks.size} tasks done",
+                    style = MaterialTheme.typography.bodyMedium)
+                Spacer(Modifier.height(8.dp))
+                LinearProgressIndicator(
+                    progress = { if (tasks.isEmpty()) 0f else doneCount.toFloat() / tasks.size },
+                    modifier = Modifier.fillMaxWidth(),
+                    color = theme.todayCircleBg,
+                    trackColor = MaterialTheme.colorScheme.outlineVariant
+                )
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             TaskFilter.entries.forEach { option ->
@@ -116,15 +140,25 @@ private fun TaskRow(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
-            Modifier.size(22.dp).background(
-                if (task.done) MaterialTheme.colorScheme.primary else Color.Transparent,
-                CircleShape
-            ).clickable(onClick = onToggle),
+            Modifier.size(44.dp).clickable(onClick = onToggle),
             contentAlignment = Alignment.Center
         ) {
-            if (task.done) Text("✓", color = MaterialTheme.colorScheme.onPrimary)
+            Box(
+                Modifier.size(22.dp)
+                    .background(
+                        if (task.done) MaterialTheme.colorScheme.primary else Color.Transparent,
+                        CircleShape
+                    )
+                    .then(
+                        if (task.done) Modifier
+                        else Modifier.border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                if (task.done) Text("✓", color = MaterialTheme.colorScheme.onPrimary)
+            }
         }
-        Spacer(Modifier.width(12.dp))
+        Spacer(Modifier.width(4.dp))
         Column(Modifier.weight(1f)) {
             Text(task.title, style = MaterialTheme.typography.bodyMedium,
                 maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -135,9 +169,11 @@ private fun TaskRow(
                     maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
-        Spacer(Modifier.width(8.dp))
-        Text("Delete", style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.error, modifier = Modifier.clickable(onClick = onDelete))
+        Spacer(Modifier.width(4.dp))
+        Box(Modifier.size(44.dp).clickable(onClick = onDelete), contentAlignment = Alignment.Center) {
+            Text("Delete", style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.error)
+        }
     }
 }
 

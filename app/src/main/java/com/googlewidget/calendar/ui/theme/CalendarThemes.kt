@@ -54,6 +54,7 @@ object CalendarThemes {
     const val SOFT_PASTEL = "SOFT_PASTEL"
     const val MIDNIGHT = "MIDNIGHT"
     const val GLASS = "GLASS"
+    const val NEON_PURPLE = "NEON_PURPLE"
 
     val softPastel = CalendarTheme(
         id = SOFT_PASTEL,
@@ -152,8 +153,45 @@ object CalendarThemes {
         )
     )
 
+    /**
+     * Neon Purple: the dark companion-app concept. Near-black violet surfaces
+     * keep event color bars readable; the violet pair marks the selected day
+     * and the one primary action instead of tinting every surface.
+     */
+    val neonPurple = CalendarTheme(
+        id = NEON_PURPLE,
+        label = "Neon Purple",
+        bg = Color(0xFF0B0A12),
+        text = Color(0xFFF4F2FA),
+        sub = Color(0xFF9E9AB4),
+        grid = Color(0xFF242238),
+        todayCol = Color(0xFF171530),
+        todayCircleBg = Color(0xFF6A5AE0),
+        todayCircleText = Color(0xFFFFFFFF),
+        chipBg = Color(0xFF232045),
+        chipText = Color(0xFFCFC9FF),
+        teen = EventFamilyColors(
+            fill = Color(0xFF1E1A3D),
+            bar = Color(0xFF8B7CF6),
+            title = Color(0xFFF4F2FA),
+            time = Color(0xFFBEB5FF)
+        ),
+        a = EventFamilyColors(
+            fill = Color(0xFF2E1B35),
+            bar = Color(0xFFEF5DA8),
+            title = Color(0xFFFFF3FA),
+            time = Color(0xFFFFB8DC)
+        ),
+        b = EventFamilyColors(
+            fill = Color(0xFF331B28),
+            bar = Color(0xFFF25C6C),
+            title = Color(0xFFFFF4F4),
+            time = Color(0xFFFFB3B8)
+        )
+    )
+
     /** Every concrete theme. Auto resolves through [resolve]. */
-    val selectable: List<CalendarTheme> = listOf(softPastel, midnight, glass)
+    val selectable: List<CalendarTheme> = listOf(softPastel, midnight, glass, neonPurple)
 
     fun byId(id: String?): CalendarTheme? = selectable.firstOrNull { it.id == id }
 

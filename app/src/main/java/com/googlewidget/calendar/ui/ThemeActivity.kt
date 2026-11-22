@@ -73,6 +73,7 @@ private data class ThemeOption(val id: String, val label: String, val blurb: Str
 private val themeOptions = listOf(
     ThemeOption(CalendarThemes.SOFT_PASTEL, "Soft pastel", "Warm and light"),
     ThemeOption(CalendarThemes.MIDNIGHT, "Midnight", "Dark surface for low light"),
+    ThemeOption(CalendarThemes.NEON_PURPLE, "Neon Purple", "Violet accent on near-black"),
     ThemeOption(CalendarThemes.GLASS, "Glass", "Translucent, wallpaper-aware"),
     ThemeOption(CalendarThemes.AUTO, "Auto", "Glass by day, Midnight at night")
 )

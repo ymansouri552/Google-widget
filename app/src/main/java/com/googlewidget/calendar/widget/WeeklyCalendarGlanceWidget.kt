@@ -490,18 +490,28 @@ private fun AgendaList(
                         modifier = GlanceModifier.padding(top = 12.dp)
                     )
                 } else {
-                    sorted.take(paging.visible).forEach { event ->
-                        val tag = when (event.eventId) {
-                            markers.nowEventId -> "NOW"
-                            markers.nextEventId -> "NEXT"
-                            else -> null
+                    val cardTint = WidgetEventColors.palette(sorted.first(), theme).tint
+                    Box(
+                        modifier = GlanceModifier
+                            .fillMaxWidth()
+                            .cornerRadius(6.dp)
+                            .background(cardTint)
+                    ) {
+                        Column(modifier = GlanceModifier.fillMaxWidth()) {
+                            sorted.take(paging.visible).forEach { event ->
+                                val tag = when (event.eventId) {
+                                    markers.nowEventId -> "NOW"
+                                    markers.nextEventId -> "NEXT"
+                                    else -> null
+                                }
+                                AgendaRow(
+                                    event = event,
+                                    tag = tag,
+                                    dimmed = WeeklyCalendarLogic.isEnded(event, nowMillis),
+                                    theme = theme
+                                )
+                            }
                         }
-                        AgendaRow(
-                            event = event,
-                            tag = tag,
-                            dimmed = WeeklyCalendarLogic.isEnded(event, nowMillis),
-                            theme = theme
-                        )
                     }
                     if (paging.overflow > 0) {
                         Text(
@@ -540,7 +550,6 @@ private fun AgendaList(
 @Composable
 private fun DailyStatsPanel(stats: DailyStats, width: androidx.compose.ui.unit.Dp, theme: CalendarTheme) {
     val accent = WidgetThemeHelper.getAccentColor(theme)
-    val accentInk = WidgetThemeHelper.getAccentTextColor(theme)
     // Every value starts after the same icon-width slot, so the three stats
     // read as one aligned column instead of three unrelated rows.
     val valueIndent = 17.dp
@@ -567,7 +576,7 @@ private fun DailyStatsPanel(stats: DailyStats, width: androidx.compose.ui.unit.D
                 Text(
                     text = "Today",
                     style = TextStyle(
-                        color = accentInk,
+                        color = accent,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold
                     ),
@@ -694,8 +703,6 @@ private fun AgendaRow(
         modifier = GlanceModifier
             .fillMaxWidth()
             .height(32.dp)
-            .cornerRadius(6.dp)
-            .background(palette.tint)
             .padding(horizontal = 6.dp)
             .clickable(actionStartActivity(openEventIntent(event))),
         verticalAlignment = Alignment.CenterVertically

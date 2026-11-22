@@ -9,31 +9,20 @@ import android.net.Uri
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.Checklist
-import androidx.compose.material.icons.filled.Palette
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Today
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -41,19 +30,24 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import androidx.glance.appwidget.updateAll
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.googlewidget.calendar.data.CalendarAccount
 import com.googlewidget.calendar.data.CalendarEvent
 import com.googlewidget.calendar.data.CalendarRepository
 import com.googlewidget.calendar.data.CalendarResult
+import com.googlewidget.calendar.data.CalendarVisibilityRepository
 import com.googlewidget.calendar.data.TaskItem
 import com.googlewidget.calendar.data.TaskRepository
+import com.googlewidget.calendar.data.WidgetConfigKeys
 import com.googlewidget.calendar.sync.CalendarSyncWorker
 import com.googlewidget.calendar.ui.ThemeActivity
+import com.googlewidget.calendar.ui.theme.LocalCalendarTheme
 import com.googlewidget.calendar.widget.AgendaGlanceWidget
 import com.googlewidget.calendar.widget.NextUpGlanceWidget
 import com.googlewidget.calendar.widget.ThreeDayTimelineGlanceWidget
@@ -63,20 +57,27 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
 
-private enum class AppTab(val label: String) { TODAY("Today"), CALENDAR("Calendar"), TASKS("Tasks"), SETTINGS("Settings") }
+private enum class AppTab(val label: String, val icon: ImageVector) {
+    TODAY("Today", Icons.Default.Today),
+    CALENDAR("Calendar", Icons.Default.CalendarMonth),
+    NOTES("Notes", Icons.Default.Description),
+    PROFILE("Profile", Icons.Default.Person)
+}
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppScreen() {
     val context = LocalContext.current
+    val theme = LocalCalendarTheme.current
     val calendarRepo = remember { CalendarRepository(context) }
     val taskRepo = remember { TaskRepository(context) }
+    val visibilityRepo = remember { CalendarVisibilityRepository(context) }
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
 
     val tasks by taskRepo.tasks.collectAsState(initial = emptyList())
+    val disabledCalendarIds by visibilityRepo.disabledIds.collectAsState(initial = emptySet())
     var events by remember { mutableStateOf<List<CalendarEvent>>(emptyList()) }
-    var calendars by remember { mutableStateOf<List<com.googlewidget.calendar.data.CalendarAccount>>(emptyList()) }
+    var calendars by remember { mutableStateOf<List<CalendarAccount>>(emptyList()) }
     var hasPermission by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CALENDAR) ==
@@ -88,6 +89,46 @@ fun AppScreen() {
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var tab by remember { mutableIntStateOf(0) }
     var showTaskEditor by remember { mutableStateOf<TaskItem?>(null) }
+
+    val enabledIds = calendars.map { it.id }.toSet() - disabledCalendarIds
+    val queryCalendarIds = if (calendars.isNotEmpty() && enabledIds.isEmpty()) {
+        setOf(WidgetConfigKeys.NO_CALENDAR_PLACEHOLDER.toLong())
+    } else {
+        enabledIds
+    }
+
+    suspend fun fetchEvents(selectedIds: Set<Long>) {
+        val now = System.currentTimeMillis()
+        val result = calendarRepo.getUpcomingEvents(
+            now - 7L * 24 * 60 * 60 * 1000L,
+            now + 30L * 24 * 60 * 60 * 1000L,
+            selectedIds
+        )
+        withContext(Dispatchers.Main) {
+            when (result) {
+                is CalendarResult.Success -> events = result.data
+                is CalendarResult.Error -> errorMessage =
+                    result.throwable.localizedMessage ?: "Could not load events"
+                CalendarResult.PermissionRequired -> hasPermission = false
+            }
+        }
+    }
+
+    fun reloadEvents() {
+        if (calendars.isEmpty()) return
+        isLoading = true
+        scope.launch(Dispatchers.IO) {
+            try {
+                fetchEvents(queryCalendarIds)
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    errorMessage = e.localizedMessage ?: "Refresh failed"
+                }
+            } finally {
+                withContext(Dispatchers.Main) { isLoading = false }
+            }
+        }
+    }
 
     fun refresh() {
         isLoading = true
@@ -101,24 +142,14 @@ fun AppScreen() {
                 CalendarSyncWorker.enqueue(context)
 
                 val calList = calendarRepo.getCalendars()
-                val now = System.currentTimeMillis()
-                val start = now - 7L * 24 * 60 * 60 * 1000L
-                val end = now + 30L * 24 * 60 * 60 * 1000L
-                val result = calendarRepo.getUpcomingEvents(start, end)
-                withContext(Dispatchers.Main) {
-                    calendars = calList
-                    when (result) {
-                        is CalendarResult.Success -> events = result.data
-                        is CalendarResult.Error -> errorMessage = result.throwable.localizedMessage ?: "Could not load events"
-                        CalendarResult.PermissionRequired -> hasPermission = false
-                    }
-                    isLoading = false
-                }
+                withContext(Dispatchers.Main) { calendars = calList }
+                fetchEvents(queryCalendarIds)
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
                     errorMessage = e.localizedMessage ?: "Refresh failed"
-                    isLoading = false
                 }
+            } finally {
+                withContext(Dispatchers.Main) { isLoading = false }
             }
         }
     }
@@ -162,96 +193,67 @@ fun AppScreen() {
         else refresh()
     }
 
-    val currentTab = AppTab.entries[tab]
+    LaunchedEffect(disabledCalendarIds) { reloadEvents() }
+
     Scaffold(
+        containerColor = theme.bg,
         snackbarHost = { SnackbarHost(snackbar) },
-        topBar = {
-            TopAppBar(
-                title = { Text(currentTab.label) },
-                actions = {
-                    IconButton(onClick = {
-                        context.startActivity(Intent(context, ThemeActivity::class.java))
-                    }) {
-                        Icon(Icons.Default.Palette, contentDescription = "App and widget theme")
-                    }
-                    IconButton(onClick = { refresh() }) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Refresh")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surface
-                )
-            )
-        },
         bottomBar = {
-            NavigationBar {
-                AppTab.entries.forEachIndexed { index, item ->
-                    NavigationBarItem(
-                        selected = tab == index,
-                        onClick = { tab = index },
-                        icon = {
-                            Icon(
-                                when (item) {
-                                    AppTab.TODAY -> Icons.Default.Today
-                                    AppTab.CALENDAR -> Icons.Default.CalendarMonth
-                                    AppTab.TASKS -> Icons.Default.Checklist
-                                    AppTab.SETTINGS -> Icons.Default.Settings
-                                },
-                                contentDescription = item.label
-                            )
-                        },
-                        label = { Text(item.label) }
-                    )
-                }
-            }
-        },
-        floatingActionButton = {
-            if (tab == AppTab.TODAY.ordinal || tab == AppTab.TASKS.ordinal) {
-                FloatingActionButton(onClick = { showTaskEditor = TaskItem(title = "") }) {
-                    Icon(Icons.Default.Add, contentDescription = "Add task")
-                }
-            }
+            NeonBottomBar(
+                theme = theme,
+                tabs = AppTab.entries.map { NeonTab(it.label, it.icon) },
+                selected = tab,
+                onTab = { tab = it },
+                onAdd = { showTaskEditor = TaskItem(title = "") }
+            )
         }
     ) { padding ->
-        val contentModifier = Modifier.padding(padding)
-        when (tab) {
-            AppTab.TODAY.ordinal -> TodayScreen(
-                modifier = contentModifier,
-                events = events,
-                tasks = tasks,
-                today = LocalDate.now(),
-                isLoading = isLoading,
-                errorMessage = errorMessage,
-                hasPermission = hasPermission,
-                permanentlyDenied = permanentlyDenied,
-                onGrant = { permissionLauncher.launch(Manifest.permission.READ_CALENDAR) },
-                onSettings = { context.startActivity(openAppSettings(context)) },
-                onToggleTask = { scope.launch { taskRepo.toggle(it) } },
-                onDeleteTask = { scope.launch { taskRepo.delete(it) } },
-                onEditTask = { showTaskEditor = it }
-            )
-            AppTab.CALENDAR.ordinal -> CalendarScreen(
-                modifier = contentModifier,
-                events = events,
-                today = LocalDate.now(),
-                isLoading = isLoading
-            )
-            AppTab.TASKS.ordinal -> TasksScreen(
-                modifier = contentModifier,
-                tasks = tasks,
-                today = LocalDate.now(),
-                onToggle = { scope.launch { taskRepo.toggle(it) } },
-                onDelete = { scope.launch { taskRepo.delete(it) } },
-                onEdit = { showTaskEditor = it }
-            )
-            AppTab.SETTINGS.ordinal -> SettingsScreen(
-                modifier = contentModifier,
-                calendars = calendars,
-                hasPermission = hasPermission,
-                onTheme = { context.startActivity(Intent(context, ThemeActivity::class.java)) },
-                onGrant = { permissionLauncher.launch(Manifest.permission.READ_CALENDAR) },
-                onSettings = { context.startActivity(openAppSettings(context)) }
-            )
+        Box(Modifier.padding(padding).neonAppBackground(theme)) {
+            when (tab) {
+                AppTab.TODAY.ordinal -> TodayScreen(
+                    modifier = Modifier,
+                    events = events,
+                    tasks = tasks,
+                    today = LocalDate.now(),
+                    isLoading = isLoading,
+                    errorMessage = errorMessage,
+                    hasPermission = hasPermission,
+                    permanentlyDenied = permanentlyDenied,
+                    onGrant = { permissionLauncher.launch(Manifest.permission.READ_CALENDAR) },
+                    onSettings = { context.startActivity(openAppSettings(context)) },
+                    onToggleTask = { scope.launch { taskRepo.toggle(it) } },
+                    onDeleteTask = { scope.launch { taskRepo.delete(it) } },
+                    onEditTask = { showTaskEditor = it },
+                    onSeeAll = { tab = AppTab.NOTES.ordinal },
+                    onRefresh = { refresh() },
+                    onTheme = { context.startActivity(Intent(context, ThemeActivity::class.java)) }
+                )
+                AppTab.CALENDAR.ordinal -> CalendarScreen(
+                    modifier = Modifier,
+                    events = events,
+                    today = LocalDate.now(),
+                    isLoading = isLoading
+                )
+                AppTab.NOTES.ordinal -> TasksScreen(
+                    modifier = Modifier,
+                    tasks = tasks,
+                    today = LocalDate.now(),
+                    onToggle = { scope.launch { taskRepo.toggle(it) } },
+                    onDelete = { scope.launch { taskRepo.delete(it) } },
+                    onEdit = { showTaskEditor = it }
+                )
+                AppTab.PROFILE.ordinal -> SettingsScreen(
+                    modifier = Modifier,
+                    calendars = calendars,
+                    disabledCalendarIds = disabledCalendarIds,
+                    hasPermission = hasPermission,
+                    onTheme = { context.startActivity(Intent(context, ThemeActivity::class.java)) },
+                    onGrant = { permissionLauncher.launch(Manifest.permission.READ_CALENDAR) },
+                    onSettings = { context.startActivity(openAppSettings(context)) },
+                    onToggleCalendar = { scope.launch { visibilityRepo.toggle(it) } },
+                    onShowAllCalendars = { scope.launch { visibilityRepo.showAll() } }
+                )
+            }
         }
     }
 
