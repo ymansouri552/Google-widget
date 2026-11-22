@@ -357,7 +357,11 @@ private fun WeekStrip(
                     Text(
                         text = dayLabels.getOrElse(index) { WeeklyCalendarLogic.shortWeekday(date) },
                         style = TextStyle(
-                            color = if (past) mutedInk else normalInk,
+                            color = when {
+                                isSelected -> selectedInk
+                                past -> mutedInk
+                                else -> normalInk
+                            },
                             fontSize = 9.sp,
                             fontWeight = FontWeight.Medium
                         ),
@@ -396,7 +400,7 @@ private fun WeekStrip(
                         )
                     }
                     Spacer(modifier = GlanceModifier.height(3.dp))
-                    DotRow(eventsByDate[date] ?: emptyList(), theme)
+                    DotRow(eventsByDate[date] ?: emptyList(), theme, onLight = isSelected)
                 }
             }
         }
@@ -404,8 +408,19 @@ private fun WeekStrip(
 }
 
 @Composable
-private fun DotRow(events: List<CalendarEvent>, theme: CalendarTheme) {
+private fun DotRow(
+    events: List<CalendarEvent>,
+    theme: CalendarTheme,
+    onLight: Boolean = false
+) {
     if (events.isEmpty()) return
+    // The selected day sits on a white tile, so its ink and dots need the
+    // opposite end of the value range from the dark strip around it.
+    val labelInk = if (onLight) {
+        ColorProvider(WidgetEventColors.readableOn(Color.White))
+    } else {
+        WidgetThemeHelper.getSecondaryTextColor(theme)
+    }
     Row(
         modifier = GlanceModifier.height(12.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -413,11 +428,16 @@ private fun DotRow(events: List<CalendarEvent>, theme: CalendarTheme) {
         events.take(WeeklyCalendarLogic.MAX_DOTS).forEachIndexed { index, event ->
             if (index > 0) Spacer(modifier = GlanceModifier.width(2.dp))
             val palette = WidgetEventColors.palette(event, theme)
+            val dotColor = if (onLight) {
+                WidgetEventColors.blend(Color.Black, palette.full, 0.7f)
+            } else {
+                palette.full
+            }
             Box(
                 modifier = GlanceModifier
                     .size(5.dp)
                     .cornerRadius(3.dp)
-                    .background(palette.full)
+                    .background(dotColor)
             ) {}
         }
         val hidden = events.size - WeeklyCalendarLogic.MAX_DOTS
@@ -426,7 +446,7 @@ private fun DotRow(events: List<CalendarEvent>, theme: CalendarTheme) {
             Text(
                 text = "+$hidden",
                 style = TextStyle(
-                    color = WidgetThemeHelper.getSecondaryTextColor(theme),
+                    color = labelInk,
                     fontSize = 8.sp,
                     fontWeight = FontWeight.Bold
                 ),
