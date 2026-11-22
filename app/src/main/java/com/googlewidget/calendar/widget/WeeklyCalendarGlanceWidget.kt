@@ -212,7 +212,9 @@ private fun WeeklyWidgetRoot(
                 }
             }
             is CalendarResult.Success -> {
-                val eventsByDate = result.data.groupBy { CalendarRepository.getEventLocalDate(it) }
+                val nowMillis = System.currentTimeMillis()
+                val eventsByDate = WeeklyCalendarLogic.upcomingOnly(result.data, nowMillis)
+                    .groupBy { CalendarRepository.getEventLocalDate(it) }
                 if (isWide) {
                     WideWeekContent(
                         context = context,
@@ -235,6 +237,7 @@ private fun WeeklyWidgetRoot(
                         eventsByDate = eventsByDate,
                         availableWidthDp = widthDp,
                         availableHeightDp = heightDp,
+                        nowMillis = nowMillis,
                         theme = theme
                     )
                 }
@@ -274,6 +277,7 @@ private fun NarrowWeekContent(
     eventsByDate: Map<LocalDate, List<CalendarEvent>>,
     availableWidthDp: Float,
     availableHeightDp: Float,
+    nowMillis: Long,
     theme: CalendarTheme
 ) {
     Column(modifier = GlanceModifier.fillMaxSize()) {
@@ -304,7 +308,6 @@ private fun NarrowWeekContent(
         Spacer(modifier = GlanceModifier.height(4.dp))
 
         val dayEvents = eventsByDate[selectedDate] ?: emptyList()
-        val nowMillis = System.currentTimeMillis()
         AgendaList(
             context = context,
             date = selectedDate,

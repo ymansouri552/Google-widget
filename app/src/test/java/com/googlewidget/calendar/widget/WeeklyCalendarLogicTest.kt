@@ -182,6 +182,24 @@ class WeeklyCalendarLogicTest {
     }
 
     @Test
+    fun upcomingOnly_dropsFinishedEvents_andKeepsOngoingAndLaterOnes() {
+        val now = millis(today, 12)
+        val ended = event(1, "Ended", millis(today, 9), millis(today, 10))
+        val ongoing = event(2, "Ongoing", millis(today, 11), millis(today, 13))
+        val later = event(3, "Later", millis(today, 14), millis(today, 15))
+        val allDay = event(4, "Holiday", millis(today, 0), millis(today, 23), allDay = true)
+
+        assertEquals(
+            listOf(ongoing, later, allDay),
+            WeeklyCalendarLogic.upcomingOnly(listOf(ended, ongoing, later, allDay), now)
+        )
+        assertEquals(
+            emptyList<CalendarEvent>(),
+            WeeklyCalendarLogic.upcomingOnly(listOf(ended), millis(today, 20))
+        )
+    }
+
+    @Test
     fun timeLabel_uses24HourRangeAndAllDay() {
         val timed = event(1, "Class", millis(today, 9), millis(today, 10))
         assertEquals("09:00–10:00", WeeklyCalendarLogic.timeLabel(timed))

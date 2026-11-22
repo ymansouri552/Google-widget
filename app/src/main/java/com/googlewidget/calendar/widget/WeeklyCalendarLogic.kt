@@ -166,6 +166,14 @@ object WeeklyCalendarLogic {
 
     fun isEnded(event: CalendarEvent, nowMillis: Long): Boolean = event.end <= nowMillis
 
+    /**
+     * Events still ahead of the viewer, including one currently in progress.
+     * Finished events are dropped so later ones move into the visible rows as
+     * the day progresses instead of being hidden behind an overflow row.
+     */
+    fun upcomingOnly(events: List<CalendarEvent>, nowMillis: Long): List<CalendarEvent> =
+        events.filter { it.end > nowMillis }
+
     /** The one ongoing event and the first upcoming one get the NOW/NEXT tags. */
     fun agendaMarkers(events: List<CalendarEvent>, nowMillis: Long): AgendaMarkers {
         val ongoing = events.firstOrNull { isOngoing(it, nowMillis) }
