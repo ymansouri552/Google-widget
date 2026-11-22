@@ -205,8 +205,9 @@ fun TodayScreen(
                                 Row(Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
                                     Text(
                                         CalendarRepository.formatEventTime(event),
-                                        color = theme.chipText, fontSize = 12.sp,
-                                        modifier = Modifier.width(112.dp)
+                                        color = theme.chipText, fontSize = 11.sp,
+                                        maxLines = 1,
+                                        modifier = Modifier.width(128.dp)
                                     )
                                     Text(event.title, color = theme.text, fontSize = 12.sp,
                                         maxLines = 1, overflow = TextOverflow.Ellipsis)

@@ -28,11 +28,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronLeft
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -142,7 +145,7 @@ fun CalendarScreen(
                     Text("${dayEvents.size} events", color = theme.sub, fontSize = 12.sp)
                 }
                 IconButton(onClick = { insertEvent(context, now, now + 30 * 60_000L) }) {
-                    Icon(Icons.Default.MoreVert, "Add event", tint = theme.todayCircleBg)
+                    Icon(Icons.Default.Add, "Add event", tint = theme.todayCircleBg)
                 }
             }
             Spacer(Modifier.height(12.dp))
@@ -439,9 +442,11 @@ private fun DayTimeline(
                 }
 
                 model.blocks.forEach { block ->
-                    val family = theme.eventColors(block.event.title)
-                    Box(
-                        Modifier
+                    EventTimelineCard(
+                        theme = theme,
+                        block = block,
+                        context = context,
+                        modifier = Modifier
                             .offset(
                                 x = laneWidth * block.lane,
                                 y = hourHeight * (block.startMinute / 60f)
@@ -449,32 +454,66 @@ private fun DayTimeline(
                             .width(laneWidth)
                             .height(hourHeight * ((block.endMinute - block.startMinute) / 60f))
                             .padding(end = 8.dp, bottom = 4.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(family.fill)
-                            .border(1.dp, family.bar.copy(alpha = 0.4f), RoundedCornerShape(12.dp))
-                            .clickable { openCalendarEvent(context, block.event) }
-                    ) {
-                        Row(Modifier.fillMaxSize()) {
-                            Box(
-                                Modifier.width(4.dp).fillMaxHeight().padding(vertical = 8.dp)
-                                    .clip(RoundedCornerShape(2.dp)).background(family.bar)
-                            )
-                            Column(
-                                Modifier.weight(1f).padding(start = 10.dp, top = 10.dp, end = 6.dp)
-                            ) {
-                                Text(block.event.title, color = family.title, fontSize = 13.sp,
-                                    fontWeight = FontWeight.SemiBold, maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis)
-                                Text(CalendarRepository.formatEventTime(block.event),
-                                    color = family.time, fontSize = 11.sp, maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis)
-                            }
-                            IconButton(onClick = { openCalendarEvent(context, block.event) }) {
-                                Icon(Icons.Default.MoreVert, "Event options",
-                                    tint = family.time, modifier = Modifier.size(18.dp))
-                            }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EventTimelineCard(
+    theme: CalendarTheme,
+    block: TimelineBlock,
+    context: Context,
+    modifier: Modifier = Modifier
+) {
+    val family = theme.eventColors(block.event.title)
+    var menuExpanded by remember { mutableStateOf(false) }
+    Box(
+        modifier
+            .background(family.fill, RoundedCornerShape(12.dp))
+            .border(1.dp, family.bar.copy(alpha = 0.4f), RoundedCornerShape(12.dp))
+            .clickable { openCalendarEvent(context, block.event) }
+    ) {
+        Row(Modifier.fillMaxSize()) {
+            Box(
+                Modifier.width(4.dp).fillMaxHeight().padding(vertical = 8.dp)
+                    .clip(RoundedCornerShape(2.dp)).background(family.bar)
+            )
+            Column(
+                Modifier.weight(1f).padding(start = 10.dp, top = 10.dp, end = 2.dp)
+            ) {
+                Text(block.event.title, color = family.title, fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold, maxLines = 2,
+                    overflow = TextOverflow.Ellipsis)
+                Text(CalendarRepository.formatEventTime(block.event),
+                    color = family.time, fontSize = 11.sp, maxLines = 1,
+                    overflow = TextOverflow.Ellipsis)
+            }
+            Box {
+                IconButton(onClick = { menuExpanded = true }) {
+                    Icon(Icons.Default.MoreVert, "Event options",
+                        tint = family.time, modifier = Modifier.size(18.dp))
+                }
+                DropdownMenu(
+                    expanded = menuExpanded,
+                    onDismissRequest = { menuExpanded = false }
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("View in Calendar") },
+                        onClick = {
+                            menuExpanded = false
+                            openCalendarEvent(context, block.event)
                         }
-                    }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Add to calendar") },
+                        onClick = {
+                            menuExpanded = false
+                            insertEvent(context, block.event.begin, block.event.end)
+                        }
+                    )
                 }
             }
         }
