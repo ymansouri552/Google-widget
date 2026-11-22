@@ -77,6 +77,10 @@ class WeeklyCalendarGlanceWidget : GlanceAppWidget() {
             DpSize(240.dp, 180.dp),
             DpSize(320.dp, 240.dp),
             DpSize(380.dp, 300.dp),
+            // Common launcher cell on 1080x2400 @420dpi (~395x297dp): 300dp is
+            // just too tall, so without this bucket the widget falls back to
+            // 320x240 and leaves a large unused band under the agenda.
+            DpSize(380.dp, 280.dp),
             DpSize(448.dp, 300.dp),
             DpSize(448.dp, 420.dp),
             DpSize(600.dp, 360.dp)
@@ -482,7 +486,7 @@ private fun AgendaList(
         }
 
         Row(modifier = GlanceModifier.fillMaxSize()) {
-            Column(modifier = GlanceModifier.defaultWeight()) {
+            Column(modifier = GlanceModifier.defaultWeight().fillMaxHeight()) {
                 if (events.isEmpty()) {
                     Text(
                         text = "No events",
@@ -491,13 +495,16 @@ private fun AgendaList(
                     )
                 } else {
                     val cardTint = WidgetEventColors.palette(sorted.first(), theme).tint
+                    // The tinted surface and its overflow row fill the height left
+                    // by the week strip, so no empty band sits under the events.
                     Box(
                         modifier = GlanceModifier
                             .fillMaxWidth()
+                            .fillMaxHeight()
                             .cornerRadius(6.dp)
                             .background(cardTint)
                     ) {
-                        Column(modifier = GlanceModifier.fillMaxWidth()) {
+                        Column(modifier = GlanceModifier.fillMaxWidth().fillMaxHeight()) {
                             sorted.take(paging.visible).forEach { event ->
                                 val tag = when (event.eventId) {
                                     markers.nowEventId -> "NOW"
@@ -511,21 +518,28 @@ private fun AgendaList(
                                     theme = theme
                                 )
                             }
+                            if (paging.overflow > 0) {
+                                Box(
+                                    modifier = GlanceModifier
+                                        .fillMaxWidth()
+                                        .defaultWeight()
+                                        .clickable(
+                                            actionStartActivity(openDayIntent(context, date))
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "+${paging.overflow} more",
+                                        style = TextStyle(
+                                            color = WidgetThemeHelper.getPrimaryTextColor(theme),
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Medium
+                                        ),
+                                        maxLines = 1
+                                    )
+                                }
+                            }
                         }
-                    }
-                    if (paging.overflow > 0) {
-                        Text(
-                            text = "+${paging.overflow} more",
-                            style = TextStyle(
-                                color = WidgetThemeHelper.getPrimaryTextColor(theme),
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Medium
-                            ),
-                            modifier = GlanceModifier
-                                .fillMaxWidth()
-                                .clickable(actionStartActivity(openDayIntent(context, date)))
-                                .padding(vertical = 4.dp)
-                        )
                     }
                 }
             }
